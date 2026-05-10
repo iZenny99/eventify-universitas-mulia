@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../../../../core/data/dummy_data.dart';
+import '../../../../core/models/user_profile.dart';
 import '../../../../core/routes/app_routes.dart';
 import '../../../../core/utils/spacing.dart';
 import '../../../../shared/theme/app_colors.dart';
@@ -15,28 +16,96 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   final ThemeController _themeController = ThemeController.instance;
+  late final Future<UserProfile> _profileFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _profileFuture = _loadProfile();
+  }
+
+  Future<UserProfile> _loadProfile() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) {
+      return const UserProfile(
+        name: '-',
+        email: '-',
+        nim: '-',
+        faculty: 'None',
+        major: '-',
+        year: '-',
+      );
+    }
+
+    final data = await Supabase.instance.client
+        .from('profiles')
+        .select('nama_panjang,nim,program_studi,angkatan')
+        .eq('id', user.id)
+        .single();
+
+    final nama = (data['nama_panjang'] as String?)?.trim();
+    final nim = data['nim']?.toString();
+    final programStudi = data['program_studi']?.toString();
+    final angkatan = data['angkatan']?.toString();
+
+    return UserProfile(
+      name: (nama != null && nama.isNotEmpty) ? nama : '-',
+      email: user.email ?? '-',
+      nim: (nim != null && nim.isNotEmpty) ? nim : '-',
+      faculty: 'None',
+      major: (programStudi != null && programStudi.isNotEmpty)
+          ? programStudi
+          : '-',
+      year: (angkatan != null && angkatan.isNotEmpty) ? angkatan : '-',
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    final profile = DummyData.profile;
     final textTheme = Theme.of(context).textTheme;
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: SingleChildScrollView(
-        physics: const BouncingScrollPhysics(),
-        padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Profil Saya',
-              style: textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.w800,
-                color: AppColors.textPrimary,
+      body: FutureBuilder<UserProfile>(
+        future: _profileFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          if (snapshot.hasError) {
+            return Center(
+              child: Text(
+                'Gagal memuat profil.',
+                style: textTheme.bodyLarge,
               ),
-            ),
-            const SizedBox(height: AppSpacing.xl),
+            );
+          }
+
+          final profile = snapshot.data ??
+              const UserProfile(
+                name: '-',
+                email: '-',
+                nim: '-',
+                faculty: 'None',
+                major: '-',
+                year: '-',
+              );
+
+          return SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Profil Saya',
+                  style: textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.xl),
 
             // Profile Header Card
             Container(
@@ -116,7 +185,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
 
-            const SizedBox(height: AppSpacing.xl),
+              const SizedBox(height: AppSpacing.xl),
 
             // Academic Information Section
             _buildSectionLabel(context, 'Data Akademik'),
@@ -160,7 +229,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
 
-            const SizedBox(height: AppSpacing.xl),
+              const SizedBox(height: AppSpacing.xl),
 
             // Theme Section
             _buildSectionLabel(context, 'Tampilan'),
@@ -223,7 +292,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               },
             ),
 
-            const SizedBox(height: AppSpacing.xl),
+              const SizedBox(height: AppSpacing.xl),
 
             // Admin Section
             _buildSectionLabel(context, 'Pengaturan Admin'),
@@ -278,11 +347,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
 
-            const SizedBox(height: AppSpacing.xl),
+              const SizedBox(height: AppSpacing.xl),
 
             // Logout Button
             TextButton(
-              onPressed: () {
+              onPressed: () async {
+                await Supabase.instance.client.auth.signOut();
+                if (!context.mounted) return;
                 Navigator.pushNamedAndRemoveUntil(
                   context,
                   AppRoutes.login,
@@ -309,8 +380,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
             const SizedBox(height: AppSpacing.xl),
-          ],
-        ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../../core/data/dummy_data.dart';
 import '../../../../core/routes/app_routes.dart';
@@ -19,6 +20,27 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedCategoryIndex = 0;
+  late final Future<String> _nameFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameFuture = _loadName();
+  }
+
+  Future<String> _loadName() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return '-';
+
+    final data = await Supabase.instance.client
+        .from('profiles')
+        .select('nama_panjang')
+        .eq('id', user.id)
+        .single();
+
+    final name = (data['nama_panjang'] as String?)?.trim();
+    return (name != null && name.isNotEmpty) ? name : '-';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -39,12 +61,18 @@ class _HomeScreenState extends State<HomeScreen> {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'Halo, Adryo! 👋',
-                    style: textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.textPrimary,
-                    ),
+                  FutureBuilder<String>(
+                    future: _nameFuture,
+                    builder: (context, snapshot) {
+                      final name = snapshot.data ?? '-';
+                      return Text(
+                        'Halo, $name! 👋',
+                        style: textTheme.headlineSmall?.copyWith(
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.textPrimary,
+                        ),
+                      );
+                    },
                   ),
                   const SizedBox(height: 4),
                   Text(

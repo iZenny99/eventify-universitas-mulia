@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../../core/routes/app_routes.dart';
 import '../../../../core/utils/spacing.dart';
@@ -7,8 +8,92 @@ import '../../../../shared/widgets/app_scaffold.dart';
 import '../../../../shared/widgets/app_text_field.dart';
 import '../../../../shared/widgets/primary_button.dart';
 
-class LoginScreen extends StatelessWidget {
+class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
+
+  @override
+  State<LoginScreen> createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends State<LoginScreen> {
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  bool _hasShownMessage = false;
+  bool _isLoading = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_hasShownMessage) return;
+
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if (args is String && args.isNotEmpty) {
+      _hasShownMessage = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(args)),
+        );
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _handleLogin() async {
+    if (_isLoading) return;
+
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+
+    if (email.isEmpty || password.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Email dan password wajib diisi.')),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      await Supabase.instance.client.auth.signInWithPassword(
+        email: email,
+        password: password,
+      );
+
+      if (!mounted) return;
+      Navigator.pushReplacementNamed(context, AppRoutes.root);
+    } on AuthException catch (e) {
+      if (!mounted) return;
+
+      final rawMessage = e.message.toLowerCase();
+      String friendlyMessage = e.message;
+
+      if (rawMessage.contains('invalid login credentials')) {
+        friendlyMessage = 'Email belum terdaftar atau password salah.';
+      } else if (rawMessage.contains('email not confirmed')) {
+        friendlyMessage = 'Email belum dikonfirmasi.';
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(friendlyMessage)),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Terjadi kesalahan. Silakan coba lagi.')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -50,18 +135,20 @@ class LoginScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: AppSpacing.xl),
-            const AppTextField(
+            AppTextField(
               label: 'Email Kampus',
               hint: 'nim@universitasmulia.ac.id',
               icon: Icons.alternate_email_rounded,
               keyboardType: TextInputType.emailAddress,
+              controller: _emailController,
             ),
             const SizedBox(height: AppSpacing.md),
-            const AppTextField(
+            AppTextField(
               label: 'Password',
               hint: 'Masukkan password Anda',
               icon: Icons.lock_outline_rounded,
               obscureText: true,
+              controller: _passwordController,
             ),
             Align(
               alignment: Alignment.centerRight,
@@ -72,10 +159,8 @@ class LoginScreen extends StatelessWidget {
             ),
             const SizedBox(height: AppSpacing.lg),
             PrimaryButton(
-              label: 'Sign In',
-              onPressed: () {
-                Navigator.pushReplacementNamed(context, AppRoutes.root);
-              },
+              label: _isLoading ? 'Memproses...' : 'Sign In',
+              onPressed: _isLoading ? null : _handleLogin,
             ),
             const SizedBox(height: AppSpacing.xl),
             Row(
