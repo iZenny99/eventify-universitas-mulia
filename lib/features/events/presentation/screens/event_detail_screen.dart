@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/data/dummy_data.dart';
 import '../../../../core/utils/date_formatter.dart';
-import '../../../../core/utils/spacing.dart';
 import '../../../../shared/theme/app_colors.dart';
 import '../../../../shared/widgets/primary_button.dart';
 import '../../domain/event_model.dart';
