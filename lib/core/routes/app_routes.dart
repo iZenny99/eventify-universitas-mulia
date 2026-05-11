@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../features/auth/presentation/screens/login_screen.dart';
 import '../../features/auth/presentation/screens/register_screen.dart';
 import '../../features/auth/presentation/screens/splash_screen.dart';
+import '../../screens/forgot_password_screen.dart';
 import '../../features/events/domain/event_model.dart';
 import '../../features/events/presentation/screens/event_detail_screen.dart';
 import '../../features/attendance/presentation/screens/attendance_scanner_screen.dart';
@@ -15,6 +16,7 @@ class AppRoutes {
   static const String root = '/root';
   static const String eventDetail = '/event-detail';
   static const String attendanceScanner = '/attendance-scanner';
+  static const String forgotPassword = '/forgot-password';
 
   static Route<dynamic> generate(RouteSettings settings) {
     switch (settings.name) {
@@ -26,6 +28,8 @@ class AppRoutes {
         return MaterialPageRoute(builder: (_) => const RegisterScreen());
       case root:
         return MaterialPageRoute(builder: (_) => const RootScreen());
+      case forgotPassword:
+        return MaterialPageRoute(builder: (_) => const ForgotPasswordScreen());
       case attendanceScanner:
         return MaterialPageRoute(
           builder: (_) => const AttendanceScannerScreen(),

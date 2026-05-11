@@ -85,7 +85,9 @@ class EventDetailScreen extends StatelessWidget {
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
                 color: AppColors.background,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(32),
+                ),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -94,7 +96,10 @@ class EventDetailScreen extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
                         decoration: BoxDecoration(
                           color: AppColors.primary.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(100),
@@ -130,22 +135,50 @@ class EventDetailScreen extends StatelessWidget {
                   const SizedBox(height: 24),
                   Row(
                     children: [
-                      Expanded(child: _buildInfoItem(context, Icons.calendar_month_rounded, 'Tanggal', DateFormatter.formatShort(data.date))),
+                      Expanded(
+                        child: _buildInfoItem(
+                          context,
+                          Icons.calendar_month_rounded,
+                          'Tanggal',
+                          DateFormatter.formatShort(data.date),
+                        ),
+                      ),
                       const SizedBox(width: 12),
-                      Expanded(child: _buildInfoItem(context, Icons.access_time_rounded, 'Waktu', '09:00 WIB')),
+                      Expanded(
+                        child: _buildInfoItem(
+                          context,
+                          Icons.access_time_rounded,
+                          'Waktu',
+                          '09:00 WIB',
+                        ),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 12),
-                  _buildInfoItem(context, Icons.location_on_rounded, 'Lokasi', data.location),
+                  _buildInfoItem(
+                    context,
+                    Icons.location_on_rounded,
+                    'Lokasi',
+                    data.location,
+                  ),
                   const SizedBox(height: 12),
-                  _buildInfoItem(context, Icons.group_rounded, 'Kuota', '${data.quota} Peserta'),
+                  _buildInfoItem(
+                    context,
+                    Icons.group_rounded,
+                    'Kuota',
+                    '${data.quota} Peserta',
+                  ),
                   const SizedBox(height: 32),
                   Row(
                     children: [
                       CircleAvatar(
                         radius: 20,
                         backgroundColor: AppColors.primary,
-                        child: const Icon(Icons.groups_rounded, color: Colors.white, size: 20),
+                        child: const Icon(
+                          Icons.groups_rounded,
+                          color: Colors.white,
+                          size: 20,
+                        ),
                       ),
                       const SizedBox(width: 12),
                       Column(
@@ -153,11 +186,15 @@ class EventDetailScreen extends StatelessWidget {
                         children: [
                           Text(
                             'Diselenggarakan oleh',
-                            style: textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
+                            style: textTheme.bodySmall?.copyWith(
+                              color: AppColors.textSecondary,
+                            ),
                           ),
                           Text(
                             data.organizer,
-                            style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                            style: textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
                         ],
                       ),
@@ -166,7 +203,9 @@ class EventDetailScreen extends StatelessWidget {
                   const SizedBox(height: 32),
                   Text(
                     'Tentang Event',
-                    style: textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+                    style: textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                   const SizedBox(height: 12),
                   Text(
@@ -207,7 +246,12 @@ class EventDetailScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildInfoItem(BuildContext context, IconData icon, String label, String value) {
+  Widget _buildInfoItem(
+    BuildContext context,
+    IconData icon,
+    String label,
+    String value,
+  ) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -232,14 +276,16 @@ class EventDetailScreen extends StatelessWidget {
               children: [
                 Text(
                   label,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 10),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(fontSize: 10),
                 ),
                 Text(
                   value,
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 13,
-                      ),
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                  ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
