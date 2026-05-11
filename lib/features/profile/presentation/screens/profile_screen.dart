@@ -28,35 +28,38 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null) {
       return const UserProfile(
-        name: '-',
+        id: '',
+        fullName: '-',
         email: '-',
         nim: '-',
         faculty: 'None',
         major: '-',
-        year: '-',
+        academicYear: '-',
       );
     }
 
     final data = await Supabase.instance.client
         .from('profiles')
-        .select('nama_panjang,nim,program_studi,angkatan')
+        .select('full_name,nim,faculty,major,academic_year')
         .eq('id', user.id)
         .single();
 
-    final nama = (data['nama_panjang'] as String?)?.trim();
+    final nama = (data['full_name'] as String?)?.trim();
     final nim = data['nim']?.toString();
-    final programStudi = data['program_studi']?.toString();
-    final angkatan = data['angkatan']?.toString();
+    final faculty = data['faculty']?.toString();
+    final programStudi = data['major']?.toString();
+    final angkatan = data['academic_year']?.toString();
 
     return UserProfile(
-      name: (nama != null && nama.isNotEmpty) ? nama : '-',
+      id: user.id,
+      fullName: (nama != null && nama.isNotEmpty) ? nama : '-',
       email: user.email ?? '-',
       nim: (nim != null && nim.isNotEmpty) ? nim : '-',
-      faculty: 'None',
+      faculty: (faculty != null && faculty.isNotEmpty) ? faculty : 'None',
       major: (programStudi != null && programStudi.isNotEmpty)
           ? programStudi
           : '-',
-      year: (angkatan != null && angkatan.isNotEmpty) ? angkatan : '-',
+      academicYear: (angkatan != null && angkatan.isNotEmpty) ? angkatan : '-',
     );
   }
 
@@ -84,12 +87,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
           final profile = snapshot.data ??
               const UserProfile(
-                name: '-',
+                id: '',
+                fullName: '-',
                 email: '-',
                 nim: '-',
                 faculty: 'None',
                 major: '-',
-                year: '-',
+                academicYear: '-',
               );
 
           return SingleChildScrollView(
@@ -145,7 +149,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          profile.name,
+                          profile.fullName,
                           style: textTheme.titleLarge?.copyWith(
                             color: Colors.white,
                             fontWeight: FontWeight.w800,
@@ -202,28 +206,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     context,
                     Icons.badge_outlined,
                     'NIM',
-                    profile.nim,
+                    profile.nim ?? '-',
                   ),
                   const Divider(indent: 56),
                   _buildProfileItem(
                     context,
                     Icons.apartment_rounded,
                     'Fakultas',
-                    profile.faculty,
+                    profile.faculty ?? 'None',
                   ),
                   const Divider(indent: 56),
                   _buildProfileItem(
                     context,
                     Icons.school_outlined,
                     'Program Studi',
-                    profile.major,
+                    profile.major ?? '-',
                   ),
                   const Divider(indent: 56),
                   _buildProfileItem(
                     context,
                     Icons.calendar_today_rounded,
                     'Angkatan',
-                    profile.year,
+                    profile.academicYear ?? '-',
                   ),
                 ],
               ),

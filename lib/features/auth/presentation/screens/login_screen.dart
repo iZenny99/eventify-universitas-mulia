@@ -61,10 +61,14 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isLoading = true);
 
     try {
-      await Supabase.instance.client.auth.signInWithPassword(
-        email: email,
-        password: password,
-      );
+      // Bypassed for UI testing
+      // await Supabase.instance.client.auth.signInWithPassword(
+      //   email: email,
+      //   password: password,
+      // );
+      
+      // Simulate network delay
+      await Future.delayed(const Duration(seconds: 1));
 
       if (!mounted) return;
       Navigator.pushReplacementNamed(context, AppRoutes.root);

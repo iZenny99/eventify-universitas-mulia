@@ -56,7 +56,7 @@ class AttendanceScannerScreen extends StatelessWidget {
                   width: 280,
                   height: 280,
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.05),
+                    color: Colors.white.withValues(alpha: 0.05),
                     borderRadius: BorderRadius.circular(32),
                   ),
                 ),
@@ -67,16 +67,16 @@ class AttendanceScannerScreen extends StatelessWidget {
                   decoration: BoxDecoration(
                     boxShadow: [
                       BoxShadow(
-                        color: AppColors.primary.withOpacity(0.5),
+                        color: AppColors.primary.withValues(alpha: 0.5),
                         blurRadius: 10,
                         spreadRadius: 2,
                       ),
                     ],
                     gradient: LinearGradient(
                       colors: [
-                        AppColors.primary.withOpacity(0),
+                        AppColors.primary.withValues(alpha: 0),
                         AppColors.primary,
-                        AppColors.primary.withOpacity(0),
+                        AppColors.primary.withValues(alpha: 0),
                       ],
                     ),
                   ),
@@ -102,7 +102,7 @@ class AttendanceScannerScreen extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.1),
+                    color: Colors.white.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Row(

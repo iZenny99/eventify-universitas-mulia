@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../../../../core/data/dummy_data.dart';
 import '../../../../core/routes/app_routes.dart';
 import '../../../../core/utils/spacing.dart';
 import '../../../../shared/theme/app_colors.dart';
@@ -9,6 +8,8 @@ import '../../../../shared/widgets/banner_card.dart';
 import '../../../../shared/widgets/category_chip.dart';
 import '../../../../shared/widgets/event_card.dart';
 import '../../../../shared/widgets/section_header.dart';
+import '../../../events/domain/event_model.dart';
+import '../../../events/data/event_repository.dart';
 import 'root_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -21,32 +22,56 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedCategoryIndex = 0;
   late final Future<String> _nameFuture;
+  final EventRepository _eventRepository = EventRepository();
+  
+  List<String> _categories = ['Semua'];
+  bool _isLoadingCategories = true;
 
   @override
   void initState() {
     super.initState();
     _nameFuture = _loadName();
+    _loadCategories();
+  }
+
+  Future<void> _loadCategories() async {
+    try {
+      final cats = await _eventRepository.getCategories();
+      if (mounted) {
+        setState(() {
+          _categories = cats;
+          _isLoadingCategories = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoadingCategories = false);
+      }
+    }
   }
 
   Future<String> _loadName() async {
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null) return '-';
 
-    final data = await Supabase.instance.client
-        .from('profiles')
-        .select('nama_panjang')
-        .eq('id', user.id)
-        .single();
+    try {
+      final data = await Supabase.instance.client
+          .from('profiles')
+          .select('full_name')
+          .eq('id', user.id)
+          .maybeSingle();
 
-    final name = (data['nama_panjang'] as String?)?.trim();
-    return (name != null && name.isNotEmpty) ? name : '-';
+      if (data == null) return '-';
+      final name = (data['full_name'] as String?)?.trim();
+      return (name != null && name.isNotEmpty) ? name : '-';
+    } catch (e) {
+      return '-';
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
-    final categories = DummyData.categories;
-    final events = DummyData.events;
 
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
@@ -160,41 +185,80 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(height: AppSpacing.sm),
           SizedBox(
             height: 48,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              physics: const BouncingScrollPhysics(),
-              itemBuilder: (context, index) {
-                return CategoryChip(
-                  label: categories[index],
-                  selected: index == _selectedCategoryIndex,
-                  onTap: () => setState(() => _selectedCategoryIndex = index),
-                );
-              },
-              separatorBuilder: (_, __) => const SizedBox(width: 12),
-              itemCount: categories.length,
-            ),
+            child: _isLoadingCategories
+                ? const Center(child: CircularProgressIndicator())
+                : ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    physics: const BouncingScrollPhysics(),
+                    itemBuilder: (context, index) {
+                      return CategoryChip(
+                        label: _categories[index],
+                        selected: index == _selectedCategoryIndex,
+                        onTap: () => setState(() => _selectedCategoryIndex = index),
+                      );
+                    },
+                    separatorBuilder: (_, __) => const SizedBox(width: 12),
+                    itemCount: _categories.length,
+                  ),
           ),
           const SizedBox(height: AppSpacing.xl),
           const SectionHeader(title: 'Rekomendasi Untukmu'),
           const SizedBox(height: AppSpacing.md),
-          ListView.separated(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemBuilder: (context, index) {
-              final event = events[index];
-              return EventCard(
-                event: event,
-                onTap: () {
-                  Navigator.pushNamed(
-                    context,
-                    AppRoutes.eventDetail,
-                    arguments: event,
+          FutureBuilder<List<EventModel>>(
+            key: ValueKey(_selectedCategoryIndex), // Re-fetch when category changes
+            future: _eventRepository.getUpcomingEvents(
+              category: _categories[_selectedCategoryIndex],
+            ),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(32.0),
+                    child: CircularProgressIndicator(),
+                  ),
+                );
+              }
+              
+              if (snapshot.hasError) {
+                return Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(32.0),
+                    child: Text('Gagal memuat event: ${snapshot.error}'),
+                  ),
+                );
+              }
+
+              final events = snapshot.data ?? [];
+              
+              if (events.isEmpty) {
+                return const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(32.0),
+                    child: Text('Belum ada event mendatang.'),
+                  ),
+                );
+              }
+
+              return ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemBuilder: (context, index) {
+                  final event = events[index];
+                  return EventCard(
+                    event: event,
+                    onTap: () {
+                      Navigator.pushNamed(
+                        context,
+                        AppRoutes.eventDetail,
+                        arguments: event,
+                      );
+                    },
                   );
                 },
+                separatorBuilder: (_, __) => const SizedBox(height: 16),
+                itemCount: events.length,
               );
             },
-            separatorBuilder: (_, __) => const SizedBox(height: 16),
-            itemCount: events.length,
           ),
           const SizedBox(height: AppSpacing.xl),
         ],

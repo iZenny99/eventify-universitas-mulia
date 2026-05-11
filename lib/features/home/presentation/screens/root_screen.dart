@@ -65,7 +65,7 @@ class RootScreenState extends State<RootScreen> {
           elevation: 0,
           backgroundColor: AppColors.surface,
           selectedIndex: _currentIndex,
-          indicatorColor: AppColors.primary.withOpacity(0.1),
+          indicatorColor: AppColors.primary.withValues(alpha: 0.1),
           labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
           onDestinationSelected: changeTab,
           destinations: [

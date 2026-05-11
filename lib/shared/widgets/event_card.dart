@@ -58,7 +58,7 @@ class EventCard extends StatelessWidget {
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
-                        event.category.toUpperCase(),
+                        (event.categoryName ?? 'EVENT').toUpperCase(),
                         style: TextStyle(
                           fontSize: 9,
                           fontWeight: FontWeight.w800,
@@ -88,7 +88,7 @@ class EventCard extends StatelessWidget {
                         const SizedBox(width: 4),
                         Expanded(
                           child: Text(
-                            event.location,
+                            event.locationName,
                             style: Theme.of(context).textTheme.bodySmall,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -112,9 +112,9 @@ class EventCard extends StatelessWidget {
       width: 90,
       height: 90,
       color: AppColors.primary.withValues(alpha: 0.1),
-      child: event.posterUrl.startsWith('http')
+      child: (event.posterUrl != null && event.posterUrl!.startsWith('http'))
           ? Image.network(
-              event.posterUrl,
+              event.posterUrl!,
               fit: BoxFit.cover,
               errorBuilder: (_, __, ___) =>
                   Icon(Icons.event_available, color: AppColors.primary),

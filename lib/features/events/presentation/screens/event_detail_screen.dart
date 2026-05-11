@@ -60,7 +60,7 @@ class EventDetailScreen extends StatelessWidget {
             Hero(
               tag: 'event_${data.id}',
               child: CachedNetworkImage(
-                imageUrl: data.posterUrl,
+                imageUrl: data.posterUrl ?? 'https://via.placeholder.com/400',
                 height: MediaQuery.of(context).size.height * 0.45,
                 width: double.infinity,
                 fit: BoxFit.cover,
@@ -105,7 +105,7 @@ class EventDetailScreen extends StatelessWidget {
                           borderRadius: BorderRadius.circular(100),
                         ),
                         child: Text(
-                          data.category.toUpperCase(),
+                          (data.categoryName ?? 'EVENT').toUpperCase(),
                           style: TextStyle(
                             color: AppColors.primary,
                             fontSize: 10,
@@ -140,7 +140,7 @@ class EventDetailScreen extends StatelessWidget {
                           context,
                           Icons.calendar_month_rounded,
                           'Tanggal',
-                          DateFormatter.formatShort(data.date),
+                          DateFormatter.formatShort(data.startDate),
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -149,7 +149,7 @@ class EventDetailScreen extends StatelessWidget {
                           context,
                           Icons.access_time_rounded,
                           'Waktu',
-                          '09:00 WIB',
+                          '${data.startTime.substring(0, 5)} WIB',
                         ),
                       ),
                     ],
@@ -159,14 +159,14 @@ class EventDetailScreen extends StatelessWidget {
                     context,
                     Icons.location_on_rounded,
                     'Lokasi',
-                    data.location,
+                    data.locationName,
                   ),
                   const SizedBox(height: 12),
                   _buildInfoItem(
                     context,
                     Icons.group_rounded,
                     'Kuota',
-                    '${data.quota} Peserta',
+                    '${data.maxParticipants ?? '-'} Peserta',
                   ),
                   const SizedBox(height: 32),
                   Row(
@@ -191,7 +191,7 @@ class EventDetailScreen extends StatelessWidget {
                             ),
                           ),
                           Text(
-                            data.organizer,
+                            data.organizerName ?? 'Penyelenggara',
                             style: textTheme.titleMedium?.copyWith(
                               fontWeight: FontWeight.w700,
                             ),

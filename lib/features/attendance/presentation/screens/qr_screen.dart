@@ -46,7 +46,7 @@ class QrScreen extends StatelessWidget {
                 borderRadius: BorderRadius.circular(28),
                 boxShadow: [
                   BoxShadow(
-                    color: AppColors.primary.withOpacity(0.3),
+                    color: AppColors.primary.withValues(alpha: 0.3),
                     blurRadius: 20,
                     offset: const Offset(0, 10),
                   ),
@@ -71,7 +71,7 @@ class QrScreen extends StatelessWidget {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            profile.name,
+                            profile.fullName,
                             style: textTheme.titleLarge?.copyWith(
                               color: Colors.white,
                               fontWeight: FontWeight.w800,
@@ -97,7 +97,7 @@ class QrScreen extends StatelessWidget {
                             style: textTheme.bodySmall?.copyWith(color: Colors.white70),
                           ),
                           Text(
-                            profile.nim,
+                            profile.nim ?? '-',
                             style: const TextStyle(
                               color: Colors.white,
                               fontWeight: FontWeight.w700,
@@ -209,7 +209,7 @@ class _TicketCard extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Text(
-                ticket.event.title,
+                ticket.event?.title ?? 'Event',
                 textAlign: TextAlign.center,
                 style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
               ),
@@ -221,7 +221,7 @@ class _TicketCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(24),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.1),
+                      color: Colors.black.withValues(alpha: 0.1),
                       blurRadius: 30,
                     ),
                   ],
@@ -231,7 +231,7 @@ class _TicketCard extends StatelessWidget {
                     const Icon(Icons.qr_code_2_rounded, size: 200),
                     const SizedBox(height: 20),
                     Text(
-                      ticket.qrCode,
+                      ticket.qrCode ?? '-',
                       style: const TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
@@ -269,7 +269,7 @@ class _TicketCard extends StatelessWidget {
           border: Border.all(color: AppColors.divider),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.04),
+              color: Colors.black.withValues(alpha: 0.04),
               blurRadius: 15,
               offset: const Offset(0, 8),
             ),
@@ -287,11 +287,11 @@ class _TicketCard extends StatelessWidget {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(
-                          color: AppColors.primary.withOpacity(0.1),
+                          color: AppColors.primary.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
-                          event.category.toUpperCase(),
+                          (ticket.event?.categoryName ?? 'EVENT').toUpperCase(),
                           style: TextStyle(
                             color: AppColors.primary,
                             fontSize: 9,
@@ -305,15 +305,15 @@ class _TicketCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    event.title,
+                    event?.title ?? 'No Title',
                     style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
                   ),
                   const SizedBox(height: 16),
                   Row(
                     children: [
-                      _buildMeta(Icons.calendar_today_rounded, DateFormatter.formatShort(event.date)),
+                      _buildMeta(Icons.calendar_today_rounded, DateFormatter.formatShort(ticket.event?.startDate ?? DateTime.now())),
                       const SizedBox(width: 16),
-                      _buildMeta(Icons.location_on_rounded, event.location),
+                      _buildMeta(Icons.location_on_rounded, event?.locationName ?? 'TBA'),
                     ],
                   ),
                 ],
@@ -365,7 +365,7 @@ class _TicketCard extends StatelessWidget {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          ticket.qrCode,
+                          ticket.qrCode ?? '-',
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.w900,
