@@ -66,7 +66,9 @@ class LoginScreen extends StatelessWidget {
             Align(
               alignment: Alignment.centerRight,
               child: TextButton(
-                onPressed: () {},
+                onPressed: () {
+                  Navigator.pushNamed(context, AppRoutes.forgotPassword);
+                },
                 child: const Text('Lupa Password?'),
               ),
             ),
