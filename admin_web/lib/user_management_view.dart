@@ -284,7 +284,9 @@ class _UserManagementViewState extends State<UserManagementView> {
                     return const Center(child: Text('Belum ada pengguna.'));
                   }
                   return SingleChildScrollView(
-                    child: DataTable(
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: DataTable(
                       columns: const [
                         DataColumn(
                           label: Text(
@@ -363,7 +365,7 @@ class _UserManagementViewState extends State<UserManagementView> {
                         );
                       }).toList(),
                     ),
-                  );
+                  ));
                 },
               ),
             ),

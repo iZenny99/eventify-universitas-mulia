@@ -73,7 +73,7 @@ class _MyEventsScreenState extends State<MyEventsScreen> {
           await _ticketsFuture;
         },
         child: SingleChildScrollView(
-          physics: const BouncingScrollPhysics(),
+          physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
           padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
           child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

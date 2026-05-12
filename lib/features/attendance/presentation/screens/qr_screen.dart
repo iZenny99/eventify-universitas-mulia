@@ -94,7 +94,7 @@ class _QrScreenState extends State<QrScreen> {
               );
 
           return SingleChildScrollView(
-            physics: const BouncingScrollPhysics(),
+            physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
             padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

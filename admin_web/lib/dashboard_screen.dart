@@ -482,7 +482,9 @@ class _EventManagementViewState extends State<EventManagementView> {
                     );
                   }
                   return SingleChildScrollView(
-                    child: DataTable(
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: DataTable(
                       columns: const [
                         DataColumn(
                           label: Text(
@@ -590,7 +592,7 @@ class _EventManagementViewState extends State<EventManagementView> {
                           )
                           .toList(),
                     ),
-                  );
+                  ));
                 },
               ),
             ),

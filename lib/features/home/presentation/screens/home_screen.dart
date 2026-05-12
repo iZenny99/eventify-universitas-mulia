@@ -21,6 +21,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedCategoryIndex = 0;
+  int _refreshKey = 0;
   late final Future<String> _nameFuture;
   final EventRepository _eventRepository = EventRepository();
   
@@ -73,9 +74,17 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
 
-    return SingleChildScrollView(
-      physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
+    return RefreshIndicator(
+      onRefresh: () async {
+        setState(() {
+          _nameFuture = _loadName();
+          _refreshKey++;
+        });
+        await _loadCategories();
+      },
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -205,7 +214,7 @@ class _HomeScreenState extends State<HomeScreen> {
           const SectionHeader(title: 'Rekomendasi Untukmu'),
           const SizedBox(height: AppSpacing.md),
           FutureBuilder<List<EventModel>>(
-            key: ValueKey(_selectedCategoryIndex), // Re-fetch when category changes
+            key: ValueKey('$_selectedCategoryIndex-$_refreshKey'), // Re-fetch when category changes or refreshed
             future: _eventRepository.getUpcomingEvents(
               category: _categories[_selectedCategoryIndex],
             ),
@@ -263,6 +272,6 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(height: AppSpacing.xl),
         ],
       ),
-    );
+    ));
   }
 }
