@@ -6,7 +6,7 @@ import 'dashboard_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   await Supabase.initialize(
     url: 'https://awupuhimbzppoqoeerei.supabase.co',
     anonKey: 'sb_publishable_hdpNKgQkEEe2XXh4yLNasw_qrg1Vxve',
@@ -47,12 +47,12 @@ class AuthGate extends StatelessWidget {
             body: Center(child: CircularProgressIndicator()),
           );
         }
-        
+
         final session = snapshot.data?.session;
         if (session != null) {
           return const DashboardScreen();
         }
-        
+
         return const LoginScreen();
       },
     );

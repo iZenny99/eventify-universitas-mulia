@@ -18,6 +18,7 @@ class AuthService {
       final response = await _client.auth.signUp(
         email: email,
         password: password,
+        data: {'full_name': namaLengkap},
       );
 
       final user = response.user;
@@ -35,13 +36,11 @@ class AuthService {
         );
       }
 
-      await _client.from('profiles').insert({
-        'id': user.id,
-        'nama_panjang': namaLengkap,
+      await _client.from('profiles').update({
         'nim': nim,
-        'program_studi': programStudi,
-        'angkatan': angkatan,
-      }).select().single();
+        'major': programStudi,
+        'academic_year': angkatan.toString(),
+      }).eq('id', user.id).select().single();
 
       return {
         'success': true,
