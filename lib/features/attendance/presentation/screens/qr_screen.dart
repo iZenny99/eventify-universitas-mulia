@@ -1,151 +1,226 @@
 import 'package:flutter/material.dart';
+import 'package:qr_flutter/qr_flutter.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../../../../core/data/dummy_data.dart';
+import '../../../../core/models/user_profile.dart';
 import '../../../../core/utils/date_formatter.dart';
 import '../../../../core/utils/spacing.dart';
 import '../../../../shared/theme/app_colors.dart';
 import '../../domain/ticket_model.dart';
 
-class QrScreen extends StatelessWidget {
+class QrScreen extends StatefulWidget {
   const QrScreen({super.key});
 
   @override
+  State<QrScreen> createState() => _QrScreenState();
+}
+
+class _QrScreenState extends State<QrScreen> {
+  late Future<_QrData> _dataFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _dataFuture = _loadData();
+  }
+
+  Future<_QrData> _loadData() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) {
+      return _QrData(
+        profile: const UserProfile(id: '', email: '-', fullName: '-'),
+        tickets: const [],
+      );
+    }
+
+    final profileData = await Supabase.instance.client
+        .from('profiles')
+        .select('full_name,nim')
+        .eq('id', user.id)
+        .maybeSingle();
+
+    final profile = UserProfile(
+      id: user.id,
+      email: user.email ?? '-',
+      fullName: (profileData?['full_name'] as String?) ?? '-',
+      nim: profileData?['nim'] as String?,
+    );
+
+    final registrations = await Supabase.instance.client
+        .from('event_registrations')
+        .select('*, events(*)')
+        .eq('user_id', user.id)
+        .order('registered_at', ascending: false);
+
+    final tickets = (registrations as List)
+        .map((json) => TicketModel.fromJson(json))
+        .toList();
+
+    return _QrData(profile: profile, tickets: tickets);
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final profile = DummyData.profile;
-    final tickets = DummyData.tickets;
     final textTheme = Theme.of(context).textTheme;
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: SingleChildScrollView(
-        physics: const BouncingScrollPhysics(),
-        padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Tiket & Absensi',
-              style: textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.w800,
-                color: AppColors.textPrimary,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Tunjukkan kode QR ke panitia saat di lokasi.',
-              style: textTheme.bodyLarge?.copyWith(color: AppColors.textSecondary),
-            ),
-            const SizedBox(height: AppSpacing.xl),
+      body: FutureBuilder<_QrData>(
+        future: _dataFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) {
+            return const Center(child: CircularProgressIndicator());
+          }
 
-            // Premium Wallet Header
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                gradient: AppColors.primaryGradient,
-                borderRadius: BorderRadius.circular(28),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.primary.withValues(alpha: 0.3),
-                    blurRadius: 20,
-                    offset: const Offset(0, 10),
+          if (snapshot.hasError) {
+            return Center(
+              child: Text('Gagal memuat tiket.', style: textTheme.bodyLarge),
+            );
+          }
+
+          final data =
+              snapshot.data ??
+              _QrData(
+                profile: const UserProfile(id: '', email: '-', fullName: '-'),
+                tickets: const [],
+              );
+
+          return SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Tiket & Absensi',
+                  style: textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.textPrimary,
                   ),
-                ],
-              ),
-              child: Column(
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Tunjukkan kode QR ke panitia saat di lokasi.',
+                  style: textTheme.bodyLarge?.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.xl),
+                _buildCardHeader(textTheme, data),
+                const SizedBox(height: AppSpacing.xl),
+                Text(
+                  'Tiket Mendatang',
+                  style: textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.md),
+                if (data.tickets.isEmpty)
+                  _buildEmptyTickets(context)
+                else
+                  ...data.tickets.map(
+                    (ticket) => Padding(
+                      padding: const EdgeInsets.only(bottom: 20),
+                      child: _TicketCard(ticket: ticket),
+                    ),
+                  ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildCardHeader(TextTheme textTheme, _QrData data) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        gradient: AppColors.primaryGradient,
+        borderRadius: BorderRadius.circular(28),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withValues(alpha: 0.3),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'KARTU MAHASISWA',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 10,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 1.5,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            profile.fullName,
-                            style: textTheme.titleLarge?.copyWith(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const CircleAvatar(
-                        backgroundColor: Colors.white24,
-                        child: Icon(Icons.nfc_rounded, color: Colors.white),
-                      ),
-                    ],
+                  const Text(
+                    'KARTU MAHASISWA',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.5,
+                    ),
                   ),
-                  const SizedBox(height: 32),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'NIM',
-                            style: textTheme.bodySmall?.copyWith(color: Colors.white70),
-                          ),
-                          Text(
-                            profile.nim ?? '-',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 16,
-                            ),
-                          ),
-                        ],
-                      ),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text(
-                            'TOTAL TIKET',
-                            style: textTheme.bodySmall?.copyWith(color: Colors.white70),
-                          ),
-                          Text(
-                            '${tickets.length} Event',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 16,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
+                  const SizedBox(height: 4),
+                  Text(
+                    data.profile.fullName,
+                    style: textTheme.titleLarge?.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                 ],
               ),
-            ),
-
-            const SizedBox(height: AppSpacing.xl),
-
-            Text(
-              'Tiket Mendatang',
-              style: textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(height: AppSpacing.md),
-
-            if (tickets.isEmpty)
-              _buildEmptyTickets(context)
-            else
-              ...tickets.map((ticket) => Padding(
-                    padding: const EdgeInsets.only(bottom: 20),
-                    child: _TicketCard(ticket: ticket),
-                  )),
-          ],
-        ),
+              const CircleAvatar(
+                backgroundColor: Colors.white24,
+                child: Icon(Icons.nfc_rounded, color: Colors.white),
+              ),
+            ],
+          ),
+          const SizedBox(height: 32),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'NIM',
+                    style: textTheme.bodySmall?.copyWith(color: Colors.white70),
+                  ),
+                  Text(
+                    data.profile.nim ?? '-',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 16,
+                    ),
+                  ),
+                ],
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    'TOTAL TIKET',
+                    style: textTheme.bodySmall?.copyWith(color: Colors.white70),
+                  ),
+                  Text(
+                    '${data.tickets.length} Event',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 16,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -161,7 +236,11 @@ class QrScreen extends StatelessWidget {
       ),
       child: Column(
         children: [
-          Icon(Icons.confirmation_number_outlined, size: 48, color: AppColors.divider),
+          Icon(
+            Icons.confirmation_number_outlined,
+            size: 48,
+            color: AppColors.divider,
+          ),
           const SizedBox(height: 16),
           const Text(
             'Belum ada tiket aktif',
@@ -179,6 +258,7 @@ class _TicketCard extends StatelessWidget {
   final TicketModel ticket;
 
   void _showFullscreenQR(BuildContext context) {
+    final qrText = ticket.qrCode ?? ticket.id;
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -191,18 +271,10 @@ class _TicketCard extends StatelessWidget {
             icon: const Icon(Icons.close_rounded, color: Colors.black),
             onPressed: () => Navigator.pop(context),
           ),
-          title: const Text('Scan Tiket', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-          actions: [
-            IconButton(
-              icon: Icon(Icons.download_rounded, color: AppColors.primary),
-              onPressed: () {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('QR Tiket berhasil disimpan ke galeri')),
-                );
-              },
-            ),
-          ],
+          title: const Text(
+            'Scan Tiket',
+            style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+          ),
         ),
         body: Center(
           child: Column(
@@ -211,7 +283,10 @@ class _TicketCard extends StatelessWidget {
               Text(
                 ticket.event?.title ?? 'Event',
                 textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
               const SizedBox(height: 40),
               Container(
@@ -228,14 +303,14 @@ class _TicketCard extends StatelessWidget {
                 ),
                 child: Column(
                   children: [
-                    const Icon(Icons.qr_code_2_rounded, size: 200),
+                    QrImageView(data: qrText, size: 200),
                     const SizedBox(height: 20),
                     Text(
-                      ticket.qrCode ?? '-',
+                      qrText,
                       style: const TextStyle(
-                        fontSize: 18,
+                        fontSize: 16,
                         fontWeight: FontWeight.bold,
-                        letterSpacing: 4,
+                        letterSpacing: 2,
                       ),
                     ),
                   ],
@@ -285,7 +360,10 @@ class _TicketCard extends StatelessWidget {
                   Row(
                     children: [
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
                         decoration: BoxDecoration(
                           color: AppColors.primary.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(8),
@@ -300,27 +378,39 @@ class _TicketCard extends StatelessWidget {
                         ),
                       ),
                       const Spacer(),
-                      Icon(Icons.info_outline_rounded, color: AppColors.textSecondary, size: 18),
+                      Icon(
+                        Icons.info_outline_rounded,
+                        color: AppColors.textSecondary,
+                        size: 18,
+                      ),
                     ],
                   ),
                   const SizedBox(height: 12),
                   Text(
                     event?.title ?? 'No Title',
-                    style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                    style: textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                   const SizedBox(height: 16),
                   Row(
                     children: [
-                      _buildMeta(Icons.calendar_today_rounded, DateFormatter.formatShort(ticket.event?.startDate ?? DateTime.now())),
+                      _buildMeta(
+                        Icons.calendar_today_rounded,
+                        DateFormatter.formatShort(
+                          ticket.event?.startDate ?? DateTime.now(),
+                        ),
+                      ),
                       const SizedBox(width: 16),
-                      _buildMeta(Icons.location_on_rounded, event?.locationName ?? 'TBA'),
+                      _buildMeta(
+                        Icons.location_on_rounded,
+                        event?.locationName ?? 'TBA',
+                      ),
                     ],
                   ),
                 ],
               ),
             ),
-            
-            // Dash Divider Effect
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 10),
               child: Row(
@@ -329,14 +419,15 @@ class _TicketCard extends StatelessWidget {
                   (index) => Expanded(
                     child: Container(
                       height: 1,
-                      color: index % 2 == 0 ? AppColors.divider : Colors.transparent,
+                      color: index % 2 == 0
+                          ? AppColors.divider
+                          : Colors.transparent,
                       margin: const EdgeInsets.symmetric(horizontal: 2),
                     ),
                   ),
                 ),
               ),
             ),
-
             Padding(
               padding: const EdgeInsets.all(20),
               child: Row(
@@ -348,7 +439,10 @@ class _TicketCard extends StatelessWidget {
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(color: AppColors.divider),
                     ),
-                    child: Icon(Icons.qr_code_2_rounded, size: 56, color: AppColors.textPrimary),
+                    child: QrImageView(
+                      data: ticket.qrCode ?? ticket.id,
+                      size: 56,
+                    ),
                   ),
                   const SizedBox(width: 20),
                   Expanded(
@@ -367,7 +461,7 @@ class _TicketCard extends StatelessWidget {
                         Text(
                           ticket.qrCode ?? '-',
                           style: TextStyle(
-                            fontSize: 18,
+                            fontSize: 16,
                             fontWeight: FontWeight.w900,
                             letterSpacing: 2,
                             color: AppColors.textPrimary,
@@ -376,7 +470,10 @@ class _TicketCard extends StatelessWidget {
                         const SizedBox(height: 8),
                         Text(
                           'Klik tiket untuk layar penuh',
-                          style: TextStyle(fontSize: 10, color: AppColors.textSecondary),
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: AppColors.textSecondary,
+                          ),
                         ),
                       ],
                     ),
@@ -397,9 +494,20 @@ class _TicketCard extends StatelessWidget {
         const SizedBox(width: 6),
         Text(
           label,
-          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary),
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textSecondary,
+          ),
         ),
       ],
     );
   }
+}
+
+class _QrData {
+  const _QrData({required this.profile, required this.tickets});
+
+  final UserProfile profile;
+  final List<TicketModel> tickets;
 }

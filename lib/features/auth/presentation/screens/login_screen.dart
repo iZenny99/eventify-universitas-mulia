@@ -31,9 +31,9 @@ class _LoginScreenState extends State<LoginScreen> {
       _hasShownMessage = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(args)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(args)));
       });
     }
   }
@@ -61,14 +61,10 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // Bypassed for UI testing
-      // await Supabase.instance.client.auth.signInWithPassword(
-      //   email: email,
-      //   password: password,
-      // );
-      
-      // Simulate network delay
-      await Future.delayed(const Duration(seconds: 1));
+      await Supabase.instance.client.auth.signInWithPassword(
+        email: email,
+        password: password,
+      );
 
       if (!mounted) return;
       Navigator.pushReplacementNamed(context, AppRoutes.root);
@@ -84,9 +80,9 @@ class _LoginScreenState extends State<LoginScreen> {
         friendlyMessage = 'Email belum dikonfirmasi.';
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(friendlyMessage)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(friendlyMessage)));
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

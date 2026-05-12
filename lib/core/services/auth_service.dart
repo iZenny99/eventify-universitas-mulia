@@ -2,7 +2,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 class AuthService {
   AuthService({SupabaseClient? client})
-      : _client = client ?? Supabase.instance.client;
+    : _client = client ?? Supabase.instance.client;
 
   final SupabaseClient _client;
 
@@ -30,17 +30,19 @@ class AuthService {
       }
 
       if (response.session == null) {
-        await _client.auth.signInWithPassword(
-          email: email,
-          password: password,
-        );
+        await _client.auth.signInWithPassword(email: email, password: password);
       }
 
-      await _client.from('profiles').update({
-        'nim': nim,
-        'major': programStudi,
-        'academic_year': angkatan.toString(),
-      }).eq('id', user.id).select().single();
+      await _client
+          .from('profiles')
+          .update({
+            'nim': nim,
+            'major': programStudi,
+            'academic_year': angkatan.toString(),
+          })
+          .eq('id', user.id)
+          .select()
+          .single();
 
       return {
         'success': true,
@@ -56,10 +58,7 @@ class AuthService {
         friendlyMessage = 'Email sudah digunakan.';
       }
 
-      return {
-        'success': false,
-        'message': friendlyMessage,
-      };
+      return {'success': false, 'message': friendlyMessage};
     } on PostgrestException catch (e) {
       final rawMessage = e.message.toLowerCase();
       String friendlyMessage = e.message;
@@ -68,10 +67,43 @@ class AuthService {
         friendlyMessage = 'NIM sudah digunakan.';
       }
 
+      return {'success': false, 'message': friendlyMessage};
+    } catch (_) {
       return {
         'success': false,
-        'message': friendlyMessage,
+        'message': 'Terjadi kesalahan. Silakan coba lagi.',
       };
+    }
+  }
+
+  Future<Map<String, dynamic>> resetPassword({
+    required String email,
+    String? redirectTo,
+  }) async {
+    try {
+      await _client.auth.resetPasswordForEmail(email, redirectTo: redirectTo);
+
+      return {
+        'success': true,
+        'message': 'Link reset telah dikirim ke email kamu.',
+      };
+    } on AuthException catch (e) {
+      final message = e.message.toLowerCase();
+      if (redirectTo != null &&
+          redirectTo.isNotEmpty &&
+          (message.contains('redirect') || message.contains('url'))) {
+        try {
+          await _client.auth.resetPasswordForEmail(email);
+          return {
+            'success': true,
+            'message':
+                'Link reset terkirim. Pastikan redirect URL sudah benar.',
+          };
+        } catch (_) {
+          return {'success': false, 'message': e.message};
+        }
+      }
+      return {'success': false, 'message': e.message};
     } catch (_) {
       return {
         'success': false,

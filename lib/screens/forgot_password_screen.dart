@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
+import '../core/routes/app_routes.dart';
+import '../core/services/auth_service.dart';
 import '../core/utils/spacing.dart';
 import '../shared/theme/app_colors.dart';
 import '../shared/widgets/app_scaffold.dart';
@@ -14,6 +17,7 @@ class ForgotPasswordScreen extends StatefulWidget {
 }
 
 class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
+  final _authService = AuthService();
   final _emailController = TextEditingController();
   bool _isLoading = false;
 
@@ -43,25 +47,32 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
     setState(() => _isLoading = true);
 
-    // Simulate network delay for loading state
-    await Future.delayed(const Duration(seconds: 2));
+    final redirectTo = dotenv.env['SUPABASE_RESET_REDIRECT_URL'];
+    final result = await _authService.resetPassword(
+      email: email,
+      redirectTo: redirectTo != null && redirectTo.isNotEmpty
+          ? redirectTo
+          : null,
+    );
 
     if (!mounted) return;
 
     setState(() => _isLoading = false);
 
-    // Show success snackbar
+    final success = result['success'] == true;
+    final message = result['message'] as String? ?? 'Terjadi kesalahan.';
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: const Text('Link reset telah dikirim ke email kamu'),
-        backgroundColor: AppColors.success,
+        content: Text(message),
+        backgroundColor: success ? AppColors.success : AppColors.error,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
     );
 
-    // Redirect back to login
-    Navigator.pushReplacementNamed(context, '/login');
+    if (success) {
+      Navigator.pushReplacementNamed(context, AppRoutes.login);
+    }
   }
 
   @override
@@ -124,7 +135,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                 Text('Ingat kata sandi?', style: textTheme.bodyMedium),
                 TextButton(
                   onPressed: () {
-                    Navigator.pushReplacementNamed(context, '/login');
+                    Navigator.pushReplacementNamed(context, AppRoutes.login);
                   },
                   child: const Text('Kembali ke Login'),
                 ),

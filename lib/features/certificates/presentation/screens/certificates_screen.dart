@@ -1,56 +1,103 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../../../../core/data/dummy_data.dart';
 import '../../../../core/utils/date_formatter.dart';
 import '../../../../core/utils/spacing.dart';
 import '../../../../shared/theme/app_colors.dart';
+import '../../domain/certificate_model.dart';
 
-class CertificatesScreen extends StatelessWidget {
+class CertificatesScreen extends StatefulWidget {
   const CertificatesScreen({super.key});
 
   @override
+  State<CertificatesScreen> createState() => _CertificatesScreenState();
+}
+
+class _CertificatesScreenState extends State<CertificatesScreen> {
+  late Future<List<CertificateModel>> _certFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _certFuture = _loadCertificates();
+  }
+
+  Future<List<CertificateModel>> _loadCertificates() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return [];
+
+    final response = await Supabase.instance.client
+        .from('certificates')
+        .select('*, events(title)')
+        .eq('user_id', user.id)
+        .order('issued_at', ascending: false);
+
+    return (response as List)
+        .map((json) => CertificateModel.fromJson(json))
+        .toList();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final certificates = DummyData.certificates;
     final textTheme = Theme.of(context).textTheme;
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: SingleChildScrollView(
-        physics: const BouncingScrollPhysics(),
-        padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Sertifikat Saya',
-              style: textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.w800,
-                color: AppColors.textPrimary,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Unduh sertifikat sebagai bukti partisipasi event.',
-              style: textTheme.bodyLarge,
-            ),
-            const SizedBox(height: AppSpacing.xl),
+      body: FutureBuilder<List<CertificateModel>>(
+        future: _certFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) {
+            return const Center(child: CircularProgressIndicator());
+          }
 
-            if (certificates.isEmpty)
-              _buildEmptyState(context)
-            else
-              ListView.separated(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemBuilder: (context, index) {
-                  final cert = certificates[index];
-                  return _CertificateCard(cert: cert);
-                },
-                separatorBuilder: (_, __) => const SizedBox(height: 16),
-                itemCount: certificates.length,
+          if (snapshot.hasError) {
+            return Center(
+              child: Text(
+                'Gagal memuat sertifikat.',
+                style: textTheme.bodyLarge,
               ),
-            const SizedBox(height: AppSpacing.xl),
-          ],
-        ),
+            );
+          }
+
+          final certificates = snapshot.data ?? [];
+
+          return SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Sertifikat Saya',
+                  style: textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Unduh sertifikat sebagai bukti partisipasi event.',
+                  style: textTheme.bodyLarge,
+                ),
+                const SizedBox(height: AppSpacing.xl),
+                if (certificates.isEmpty)
+                  _buildEmptyState(context)
+                else
+                  ListView.separated(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemBuilder: (context, index) {
+                      final cert = certificates[index];
+                      return _CertificateCard(cert: cert);
+                    },
+                    separatorBuilder: (_, __) => const SizedBox(height: 16),
+                    itemCount: certificates.length,
+                  ),
+                const SizedBox(height: AppSpacing.xl),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
@@ -88,7 +135,7 @@ class CertificatesScreen extends StatelessWidget {
 class _CertificateCard extends StatelessWidget {
   const _CertificateCard({required this.cert});
 
-  final dynamic cert; // In real app, use CertificateModel
+  final CertificateModel cert;
 
   @override
   Widget build(BuildContext context) {
@@ -111,7 +158,6 @@ class _CertificateCard extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         child: Row(
           children: [
-            // Certificate Icon / Preview Placeholder
             Container(
               width: 64,
               height: 64,
@@ -133,8 +179,6 @@ class _CertificateCard extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 16),
-
-            // Info
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -150,7 +194,7 @@ class _CertificateCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    cert.eventName,
+                    cert.eventName ?? '-',
                     style: textTheme.bodySmall?.copyWith(
                       fontWeight: FontWeight.w600,
                     ),
@@ -178,8 +222,6 @@ class _CertificateCard extends StatelessWidget {
                 ],
               ),
             ),
-
-            // Download Button
             Container(
               decoration: BoxDecoration(
                 color: AppColors.primary.withValues(alpha: 0.1),
@@ -187,7 +229,6 @@ class _CertificateCard extends StatelessWidget {
               ),
               child: IconButton(
                 onPressed: () {
-                  // Download logic
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Mengunduh sertifikat...')),
                   );

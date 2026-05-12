@@ -1,18 +1,65 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../../../../core/data/dummy_data.dart';
 import '../../../../core/routes/app_routes.dart';
 import '../../../../core/utils/spacing.dart';
 import '../../../../shared/theme/app_colors.dart';
 import '../../../../shared/widgets/event_card.dart';
 import '../../../../shared/widgets/section_header.dart';
+import '../../domain/event_model.dart';
+import '../../../attendance/domain/ticket_model.dart';
 
-class MyEventsScreen extends StatelessWidget {
+class MyEventsScreen extends StatefulWidget {
   const MyEventsScreen({super.key});
 
   @override
+  State<MyEventsScreen> createState() => _MyEventsScreenState();
+}
+
+class _MyEventsScreenState extends State<MyEventsScreen> {
+  int _selectedTab = 0;
+  late Future<List<TicketModel>> _ticketsFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _ticketsFuture = _loadTickets();
+  }
+
+  Future<List<TicketModel>> _loadTickets() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return [];
+
+    final response = await Supabase.instance.client
+        .from('event_registrations')
+        .select('*, events(*)')
+        .eq('user_id', user.id)
+        .order('registered_at', ascending: false);
+
+    return (response as List)
+        .map((json) => TicketModel.fromJson(json))
+        .toList();
+  }
+
+  List<TicketModel> _filterTickets(List<TicketModel> tickets) {
+    if (_selectedTab == 2) return tickets;
+
+    final now = DateTime.now();
+    return tickets.where((ticket) {
+      final event = ticket.event;
+      if (event == null) return false;
+
+      final isUpcoming = event.startDate.isAfter(now);
+      final isCompleted =
+          event.status == 'completed' || ticket.attendedAt != null;
+
+      if (_selectedTab == 0) return isUpcoming;
+      return isCompleted;
+    }).toList();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final events = DummyData.myEvents;
     final textTheme = Theme.of(context).textTheme;
 
     return Scaffold(
@@ -36,44 +83,101 @@ class MyEventsScreen extends StatelessWidget {
               style: textTheme.bodyLarge,
             ),
             const SizedBox(height: AppSpacing.xl),
-
-            // Tab-like selection (Visual only for now)
             Row(
               children: [
-                _buildSimpleTab(context, 'Mendatang', true),
+                _buildSimpleTab(context, 'Mendatang', _selectedTab == 0, () {
+                  setState(() => _selectedTab = 0);
+                }),
                 const SizedBox(width: 12),
-                _buildSimpleTab(context, 'Riwayat', false),
+                _buildSimpleTab(context, 'Riwayat', _selectedTab == 1, () {
+                  setState(() => _selectedTab = 1);
+                }),
+                const SizedBox(width: 12),
+                _buildSimpleTab(context, 'Semua', _selectedTab == 2, () {
+                  setState(() => _selectedTab = 2);
+                }),
               ],
             ),
-
             const SizedBox(height: AppSpacing.xl),
-
             const SectionHeader(title: 'Tiket Terdaftar'),
             const SizedBox(height: AppSpacing.md),
-
-            if (events.isEmpty)
-              _buildEmptyState(context)
-            else
-              ListView.separated(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemBuilder: (context, index) {
-                  final event = events[index];
-                  return EventCard(
-                    event: event,
-                    enableHero: false,
-                    onTap: () {
-                      Navigator.pushNamed(
-                        context,
-                        AppRoutes.eventDetail,
-                        arguments: event,
-                      );
-                    },
+            FutureBuilder<List<TicketModel>>(
+              future: _ticketsFuture,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(32.0),
+                      child: CircularProgressIndicator(),
+                    ),
                   );
-                },
-                separatorBuilder: (_, __) => const SizedBox(height: 16),
-                itemCount: events.length,
-              ),
+                }
+
+                if (snapshot.hasError) {
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(32.0),
+                      child: Text('Gagal memuat data: ${snapshot.error}'),
+                    ),
+                  );
+                }
+
+                final tickets = _filterTickets(snapshot.data ?? []);
+                if (tickets.isEmpty) {
+                  return _buildEmptyState(context);
+                }
+
+                return ListView.separated(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemBuilder: (context, index) {
+                    final ticket = tickets[index];
+                    final event =
+                        ticket.event ??
+                        EventModel(
+                          id: '-1',
+                          title: 'Event',
+                          slug: 'event',
+                          description: '- ',
+                          startDate: DateTime.now(),
+                          endDate: DateTime.now(),
+                          startTime: '00:00:00',
+                          endTime: '00:00:00',
+                          locationName: '-',
+                        );
+
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        EventCard(
+                          event: event,
+                          enableHero: false,
+                          onTap: () {
+                            Navigator.pushNamed(
+                              context,
+                              AppRoutes.eventDetail,
+                              arguments: event,
+                            );
+                          },
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.only(left: 8),
+                          child: Text(
+                            'Status: ${ticket.status.toUpperCase()}',
+                            style: textTheme.bodySmall?.copyWith(
+                              color: AppColors.textSecondary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                  separatorBuilder: (_, __) => const SizedBox(height: 16),
+                  itemCount: tickets.length,
+                );
+              },
+            ),
             const SizedBox(height: AppSpacing.xl),
           ],
         ),
@@ -81,31 +185,39 @@ class MyEventsScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildSimpleTab(BuildContext context, String label, bool isActive) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-      decoration: BoxDecoration(
-        color: isActive ? AppColors.primary : AppColors.surface,
-        borderRadius: BorderRadius.circular(100),
-        border: Border.all(
-          color: isActive ? AppColors.primary : AppColors.divider,
+  Widget _buildSimpleTab(
+    BuildContext context,
+    String label,
+    bool isActive,
+    VoidCallback onTap,
+  ) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+        decoration: BoxDecoration(
+          color: isActive ? AppColors.primary : AppColors.surface,
+          borderRadius: BorderRadius.circular(100),
+          border: Border.all(
+            color: isActive ? AppColors.primary : AppColors.divider,
+          ),
+          boxShadow: isActive
+              ? [
+                  BoxShadow(
+                    color: AppColors.primary.withValues(alpha: 0.2),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ]
+              : [],
         ),
-        boxShadow: isActive
-            ? [
-                BoxShadow(
-                  color: AppColors.primary.withValues(alpha: 0.2),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ]
-            : [],
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: isActive ? Colors.white : AppColors.textSecondary,
-          fontWeight: isActive ? FontWeight.w700 : FontWeight.w600,
-          fontSize: 13,
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isActive ? Colors.white : AppColors.textSecondary,
+            fontWeight: isActive ? FontWeight.w700 : FontWeight.w600,
+            fontSize: 13,
+          ),
         ),
       ),
     );

@@ -59,6 +59,48 @@ class _RegisterScreenState extends State<RegisterScreen> {
       return;
     }
 
+    if (!_isValidNim(nim)) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('NIM harus 7 digit angka.')));
+      return;
+    }
+
+    if (!_isValidEmail(email)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Format email tidak valid.')),
+      );
+      return;
+    }
+
+    if (password.length < 8) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Password minimal 8 karakter.')),
+      );
+      return;
+    }
+
+    if (!_isValidNim(nim)) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('NIM harus 7 digit angka.')));
+      return;
+    }
+
+    if (!_isValidEmail(email)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Format email tidak valid.')),
+      );
+      return;
+    }
+
+    if (password.length < 8) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Password minimal 8 karakter.')),
+      );
+      return;
+    }
+
     final angkatan = int.tryParse(angkatanText);
     if (angkatan == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -92,9 +134,22 @@ class _RegisterScreenState extends State<RegisterScreen> {
       return;
     }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  bool _isValidNim(String value) {
+    final nimRegex = RegExp(r'^\d{7}$');
+    return nimRegex.hasMatch(value);
+  }
+
+  bool _isValidEmail(String value) {
+    if (value.contains(' ') || value.contains(',') || value.contains(';')) {
+      return false;
+    }
+    final emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+    return emailRegex.hasMatch(value);
   }
 
   @override
@@ -129,7 +184,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               ),
             ),
             const SizedBox(height: AppSpacing.xl),
-            
+
             // Personal Information Section
             _buildSectionHeader(context, 'Informasi Pribadi'),
             const SizedBox(height: AppSpacing.md),
@@ -186,7 +241,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               controller: _passwordController,
             ),
             const SizedBox(height: AppSpacing.xl),
-            
+
             PrimaryButton(
               label: _isLoading ? 'Memproses...' : 'Daftar Sekarang',
               onPressed: _isLoading ? null : _handleRegister,
@@ -195,10 +250,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(
-                  'Sudah punya akun?',
-                  style: textTheme.bodyMedium,
-                ),
+                Text('Sudah punya akun?', style: textTheme.bodyMedium),
                 TextButton(
                   onPressed: () => Navigator.pop(context),
                   child: const Text('Login di sini'),
@@ -227,10 +279,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
         Text(
           title.toUpperCase(),
           style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                color: AppColors.primary,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 1.2,
-              ),
+            color: AppColors.primary,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 1.2,
+          ),
         ),
       ],
     );
