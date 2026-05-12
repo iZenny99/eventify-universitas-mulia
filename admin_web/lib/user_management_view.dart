@@ -96,6 +96,92 @@ class _UserManagementViewState extends State<UserManagementView> {
     if (mounted) setState(() => _usersFuture = _loadUsers());
   }
 
+  Future<void> _deleteUser(String userId) async {
+    final bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Hapus Pengguna?'),
+        content: const Text('Tindakan ini permanen. Seluruh pendaftaran atas nama pengguna ini akan ikut terhapus.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Batal')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Ya, Hapus', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    try {
+      await adminClient.auth.admin.deleteUser(userId);
+      await adminClient.from('profiles').delete().eq('id', userId);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Pengguna berhasil dihapus.')));
+        setState(() => _usersFuture = _loadUsers());
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gagal menghapus: $e')));
+    }
+  }
+
+  void _showEditUserDialog(Map<String, dynamic> user) {
+    _nameCtrl.text = user['full_name']?.toString() ?? '';
+    _nimCtrl.text = user['nim']?.toString() ?? '';
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Edit Profil Pengguna'),
+        content: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextFormField(
+                controller: _nameCtrl,
+                decoration: const InputDecoration(labelText: 'Nama Lengkap'),
+                validator: (v) => v!.isEmpty ? 'Wajib diisi' : null,
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _nimCtrl,
+                decoration: const InputDecoration(labelText: 'NIM'),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Batal')),
+          ElevatedButton(
+            onPressed: () async {
+              if (!_formKey.currentState!.validate()) return;
+              try {
+                await adminClient.from('profiles').update({
+                  'full_name': _nameCtrl.text.trim(),
+                  'nim': _nimCtrl.text.trim(),
+                }).eq('id', user['id']);
+                
+                if (ctx.mounted) {
+                  Navigator.pop(ctx);
+                }
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Profil diperbarui!')));
+                  setState(() => _usersFuture = _loadUsers());
+                }
+              } catch (e) {
+                if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+              }
+            },
+            child: const Text('Simpan'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showCreateUserDialog() {
     showDialog(
       context: context,
@@ -249,17 +335,28 @@ class _UserManagementViewState extends State<UserManagementView> {
                             ),
                             DataCell(Text(isActive ? 'AKTIF' : 'NONAKTIF')),
                             DataCell(
-                              IconButton(
-                                icon: Icon(
-                                  isActive
-                                      ? Icons.pause_circle
-                                      : Icons.play_circle,
-                                  color: isActive
-                                      ? Colors.orange
-                                      : Colors.green,
-                                ),
-                                onPressed: () =>
-                                    _toggleActive(u['id'], isActive),
+                              Row(
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.edit, color: Colors.blue, size: 20),
+                                    tooltip: 'Edit Pengguna',
+                                    onPressed: () => _showEditUserDialog(u),
+                                  ),
+                                  IconButton(
+                                    icon: Icon(
+                                      isActive ? Icons.pause_circle : Icons.play_circle,
+                                      color: isActive ? Colors.orange : Colors.green,
+                                      size: 20,
+                                    ),
+                                    tooltip: isActive ? 'Nonaktifkan' : 'Aktifkan',
+                                    onPressed: () => _toggleActive(u['id'], isActive),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.delete, color: Colors.red, size: 20),
+                                    tooltip: 'Hapus Pengguna',
+                                    onPressed: () => _deleteUser(u['id']),
+                                  ),
+                                ],
                               ),
                             ),
                           ],

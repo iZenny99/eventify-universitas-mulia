@@ -34,6 +34,7 @@ class _MyEventsScreenState extends State<MyEventsScreen> {
         .from('event_registrations')
         .select('*, events(*)')
         .eq('user_id', user.id)
+        .eq('status', 'confirmed')
         .order('registered_at', ascending: false);
 
     return (response as List)
@@ -64,10 +65,17 @@ class _MyEventsScreenState extends State<MyEventsScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: SingleChildScrollView(
-        physics: const BouncingScrollPhysics(),
-        padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
-        child: Column(
+      body: RefreshIndicator(
+        onRefresh: () async {
+          setState(() {
+            _ticketsFuture = _loadTickets();
+          });
+          await _ticketsFuture;
+        },
+        child: SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
+          padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
+          child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
@@ -181,6 +189,7 @@ class _MyEventsScreenState extends State<MyEventsScreen> {
             const SizedBox(height: AppSpacing.xl),
           ],
         ),
+      ),
       ),
     );
   }

@@ -50,6 +50,7 @@ class _QrScreenState extends State<QrScreen> {
         .from('event_registrations')
         .select('*, events(*)')
         .eq('user_id', user.id)
+        .eq('status', 'confirmed') // Hanya tampilkan tiket aktif
         .order('registered_at', ascending: false);
 
     final tickets = (registrations as List)
@@ -65,9 +66,16 @@ class _QrScreenState extends State<QrScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: FutureBuilder<_QrData>(
-        future: _dataFuture,
-        builder: (context, snapshot) {
+      body: RefreshIndicator(
+        onRefresh: () async {
+          setState(() {
+            _dataFuture = _loadData();
+          });
+          await _dataFuture;
+        },
+        child: FutureBuilder<_QrData>(
+          future: _dataFuture,
+          builder: (context, snapshot) {
           if (snapshot.connectionState != ConnectionState.done) {
             return const Center(child: CircularProgressIndicator());
           }
@@ -128,6 +136,7 @@ class _QrScreenState extends State<QrScreen> {
             ),
           );
         },
+      ),
       ),
     );
   }

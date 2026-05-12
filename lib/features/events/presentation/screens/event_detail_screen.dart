@@ -74,25 +74,39 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
     if (user == null) return;
 
     setState(() => _isLoadingAction = true);
+    List fields = [];
     try {
-      final fields = await _supabase
+      final response = await _supabase
           .from('event_form_fields')
           .select()
           .eq('event_id', data.id)
           .order('sort_order');
+      fields = response as List;
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoadingAction = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Gagal mengambil form pendaftaran.')),
+      );
+      return;
+    }
 
-      final answers = await _showRegistrationForm(fields: fields as List);
-      if (answers == null) {
-        if (mounted) setState(() => _isLoadingAction = false);
-        return;
-      }
+    if (!mounted) return;
+    // Matikan loading saat memunculkan dialog form!
+    setState(() => _isLoadingAction = false);
 
+    final answers = await _showRegistrationForm(fields: fields);
+    if (answers == null) return; // User membatalkan form
+
+    // Nyalakan loading lagi saat submit data ke server
+    setState(() => _isLoadingAction = true);
+    try {
       await _submitRegistration(data, answers);
     } on PostgrestException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text(e.message)));
+      ).showSnackBar(SnackBar(content: Text('Gagal: ${e.message}')));
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -118,7 +132,6 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
             'event_id': data.id,
             'user_id': user.id,
             'status': 'confirmed',
-            'confirmed_at': DateTime.now().toIso8601String(),
           })
           .select()
           .single();
@@ -127,7 +140,6 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
           .from('event_registrations')
           .update({
             'status': 'confirmed',
-            'confirmed_at': DateTime.now().toIso8601String(),
           })
           .eq('id', _registration!['id'])
           .select()
@@ -148,14 +160,18 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
     }
 
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Pendaftaran berhasil dikirim!')),
-    );
+    
+    // Matikan loading sebelum menampilkan dialog (agar tidak crash mouse tracker)
+    setState(() => _isLoadingAction = false);
+
     final qrValue =
         registration['qr_code']?.toString() ??
         registration['id']?.toString() ??
         '-';
+        
     await _showQrDialog(qrValue, data.title);
+    
+    // Load ulang status layar
     await _loadRegistrationState();
     await _loadConfirmedCount();
   }
@@ -181,10 +197,12 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
           builder: (context, setDialogState) {
             return AlertDialog(
               title: const Text('Form Pendaftaran'),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: fields.map<Widget>((field) {
+              content: SizedBox(
+                width: double.maxFinite,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: fields.map<Widget>((field) {
                     final id = field['id'] as String;
                     final label = field['label']?.toString() ?? 'Field';
                     final type = field['field_type']?.toString() ?? 'text';
@@ -236,7 +254,8 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                   }).toList(),
                 ),
               ),
-              actions: [
+            ),
+            actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(context),
                   child: const Text('Batal'),
@@ -386,12 +405,41 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
   Future<void> _handleCancel() async {
     if (_isLoadingAction || _registration == null) return;
 
+    // Tampilkan popup konfirmasi
+    final bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Batalkan Pendaftaran?'),
+          content: const Text(
+            'Apakah kamu yakin ingin membatalkan pendaftaran event ini? Tiket QR kamu akan dihapus.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Tidak'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Ya, Batalkan', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirm != true) return;
+
     setState(() => _isLoadingAction = true);
     try {
+      // Tambahkan .select().single() agar jika terblokir RLS / gagal, langsung melempar error
       await _supabase
           .from('event_registrations')
           .update({'status': 'cancelled'})
-          .eq('id', _registration!['id']);
+          .eq('id', _registration!['id'])
+          .select()
+          .single();
 
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -403,7 +451,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text(e.message)));
+      ).showSnackBar(SnackBar(content: Text('Gagal: ${e.message} (Cek RLS Database)')));
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -665,22 +713,24 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
           ],
         ),
       ),
-      bottomSheet: Container(
-        padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 20,
-              offset: const Offset(0, -5),
-            ),
-          ],
-        ),
-        child: PrimaryButton(
-          label: buttonLabel,
-          onPressed: _isLoadingAction ? null : buttonAction,
-          isLoading: _isLoadingAction,
+      bottomNavigationBar: SafeArea(
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.05),
+                blurRadius: 20,
+                offset: const Offset(0, -5),
+              ),
+            ],
+          ),
+          child: PrimaryButton(
+            label: buttonLabel,
+            onPressed: _isLoadingAction ? null : buttonAction,
+            isLoading: _isLoadingAction,
+          ),
         ),
       ),
     );

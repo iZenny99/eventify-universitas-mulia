@@ -312,7 +312,7 @@ class _EventManagementViewState extends State<EventManagementView> {
           child: FutureBuilder<List<Map<String, dynamic>>>(
             future: adminClient
                 .from('event_registrations')
-                .select('*, profiles(full_name, email, nim)')
+                .select('*, profiles(full_name, email, nim), registration_form_answers(answer_text, event_form_fields(label))')
                 .eq('event_id', eventId),
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
@@ -330,7 +330,9 @@ class _EventManagementViewState extends State<EventManagementView> {
                 itemBuilder: (context, index) {
                   final reg = data[index];
                   final profile = reg['profiles'] as Map<String, dynamic>?;
-                  return ListTile(
+                  final answers = (reg['registration_form_answers'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+                  
+                  final header = ListTile(
                     leading: const CircleAvatar(child: Icon(Icons.person)),
                     title: Text(
                       profile?['full_name'] ?? 'Unknown',
@@ -343,37 +345,80 @@ class _EventManagementViewState extends State<EventManagementView> {
                       onSelected: (status) async {
                         final updateData = {'status': status};
                         if (status == 'confirmed') {
-                          updateData['confirmed_at'] = DateTime.now()
-                              .toIso8601String();
+                          updateData['confirmed_at'] = DateTime.now().toIso8601String();
                         }
                         if (status == 'attended') {
-                          updateData['attended_at'] = DateTime.now()
-                              .toIso8601String();
+                          updateData['attended_at'] = DateTime.now().toIso8601String();
                         }
                         await adminClient
                             .from('event_registrations')
                             .update(updateData)
                             .eq('id', reg['id']);
-                        if (mounted) setState(() {});
+                        if (ctx.mounted) {
+                          setState(() {});
+                          // Close dialog to refresh
+                          Navigator.pop(ctx);
+                          _showRegistrations(eventId, eventTitle);
+                        }
                       },
                       itemBuilder: (context) => const [
-                        PopupMenuItem(
-                          value: 'confirmed',
-                          child: Text('Konfirmasi'),
-                        ),
-                        PopupMenuItem(
-                          value: 'cancelled',
-                          child: Text('Batalkan'),
-                        ),
-                        PopupMenuItem(
-                          value: 'attended',
-                          child: Text('Tandai Hadir'),
-                        ),
+                        PopupMenuItem(value: 'confirmed', child: Text('Konfirmasi')),
+                        PopupMenuItem(value: 'cancelled', child: Text('Batalkan')),
+                        PopupMenuItem(value: 'attended', child: Text('Tandai Hadir')),
                       ],
-                      child: Text(
-                        reg['status'].toString().toUpperCase(),
-                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: reg['status'] == 'confirmed' ? Colors.green.withValues(alpha: 0.1) : 
+                                 reg['status'] == 'cancelled' ? Colors.red.withValues(alpha: 0.1) : 
+                                 Colors.orange.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(100),
+                        ),
+                        child: Text(
+                          reg['status'].toString().toUpperCase(),
+                          style: TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 12,
+                            color: reg['status'] == 'confirmed' ? Colors.green : 
+                                   reg['status'] == 'cancelled' ? Colors.red : 
+                                   Colors.orange,
+                          ),
+                        ),
                       ),
+                    ),
+                  );
+
+                  if (answers.isEmpty) return header;
+
+                  return Theme(
+                    data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                    child: ExpansionTile(
+                      title: header.title!,
+                      subtitle: header.subtitle,
+                      leading: header.leading,
+                      trailing: header.trailing,
+                      childrenPadding: const EdgeInsets.symmetric(horizontal: 32, vertical: 8),
+                      expandedCrossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Divider(),
+                        const Text('Data Formulir Pendaftaran:', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primary)),
+                        const SizedBox(height: 8),
+                        ...answers.map((ans) {
+                          final label = ans['event_form_fields']?['label'] ?? 'Unknown Field';
+                          final val = ans['answer_text'] ?? '-';
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 8.0),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                SizedBox(width: 150, child: Text(label, style: const TextStyle(color: AppTheme.textSecondary))),
+                                const Text(': '),
+                                Expanded(child: Text(val, style: const TextStyle(fontWeight: FontWeight.w600))),
+                              ],
+                            ),
+                          );
+                        }),
+                      ],
                     ),
                   );
                 },
@@ -514,23 +559,26 @@ class _EventManagementViewState extends State<EventManagementView> {
                                 DataCell(
                                   Row(
                                     children: [
-                                      IconButton(
-                                        icon: const Icon(
-                                          Icons.people,
-                                          color: Colors.green,
-                                          size: 20,
-                                        ),
+                                      OutlinedButton.icon(
+                                        icon: const Icon(Icons.people, size: 18),
+                                        label: const Text('Pendaftar'),
                                         onPressed: () => _showRegistrations(
                                           event['id'],
                                           event['title'],
                                         ),
+                                        style: OutlinedButton.styleFrom(
+                                          foregroundColor: Colors.green,
+                                          side: const BorderSide(color: Colors.green),
+                                        ),
                                       ),
+                                      const SizedBox(width: 8),
                                       IconButton(
                                         icon: const Icon(
                                           Icons.delete,
                                           color: Colors.red,
                                           size: 20,
                                         ),
+                                        tooltip: 'Hapus Event',
                                         onPressed: () =>
                                             _deleteEvent(event['id']),
                                       ),

@@ -15,6 +15,13 @@ class AuthService {
     required int angkatan,
   }) async {
     try {
+      if (!email.endsWith('@students.universitasmulia.ac.id')) {
+        return {
+          'success': false,
+          'message': 'Gunakan email kampus (@students.universitasmulia.ac.id)',
+        };
+      }
+
       final response = await _client.auth.signUp(
         email: email,
         password: password,
