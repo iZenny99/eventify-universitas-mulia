@@ -142,6 +142,11 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
     final user = _supabase.auth.currentUser;
     if (user == null) return;
 
+    // Beri jeda sedikit agar event tap/click benar-benar selesai diproses oleh Flutter
+    // Ini adalah 'workaround' untuk bug mouse_tracker di beberapa versi Flutter
+    await Future.delayed(const Duration(milliseconds: 50));
+    if (!mounted) return;
+    
     setState(() => _isLoadingAction = true);
     List fields = [];
     try {
@@ -161,14 +166,22 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
     }
 
     if (!mounted) return;
-    // Matikan loading saat memunculkan dialog form!
-    setState(() => _isLoadingAction = false);
+    
+    Map<String, String>? answers;
+    if (fields.isEmpty) {
+      answers = {};
+    } else {
+      await Future.delayed(const Duration(milliseconds: 100));
+      if (!mounted) return;
+      setState(() => _isLoadingAction = false);
+      
+      answers = await _showRegistrationForm(fields: fields);
+      if (answers == null) return;
+      
+      if (!mounted) return;
+      setState(() => _isLoadingAction = true);
+    }
 
-    final answers = await _showRegistrationForm(fields: fields);
-    if (answers == null) return; // User membatalkan form
-
-    // Nyalakan loading lagi saat submit data ke server
-    setState(() => _isLoadingAction = true);
     try {
       await _submitRegistration(data, answers);
     } on PostgrestException catch (e) {
@@ -214,6 +227,11 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
     }
 
     if (answers.isNotEmpty) {
+      await _supabase
+          .from('registration_form_answers')
+          .delete()
+          .eq('registration_id', registration['id']);
+
       final payload = answers.entries
           .map(
             (entry) => {
@@ -228,15 +246,21 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
 
     if (!mounted) return;
 
-    // Matikan loading sebelum menampilkan dialog (agar tidak crash mouse tracker)
-    setState(() => _isLoadingAction = false);
-
     final qrValue =
         registration['qr_code']?.toString() ??
         registration['id']?.toString() ??
         '-';
 
+    // Beri jeda agar UI Flutter selesai merender state sebelum memunculkan dialog 
+    // Ini mencegah error "mouse_tracker" dan freeze di mobile
+    await Future.delayed(const Duration(milliseconds: 150));
+
+    if (!mounted) return;
     await _showQrDialog(qrValue, data.title);
+
+    if (mounted) {
+      setState(() => _isLoadingAction = false);
+    }
 
     // Load ulang status layar
     await _loadRegistrationState();

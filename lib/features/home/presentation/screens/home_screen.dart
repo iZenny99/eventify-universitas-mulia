@@ -204,7 +204,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 return BannerCard(
                   title: event.title,
                   subtitle: event.shortDescription ?? 'Event pilihan untukmu',
-                  imageUrl: event.bannerUrl,
+                  imageUrl: event.posterUrl ?? event.bannerUrl,
                   onTap: () => Navigator.pushNamed(
                     context,
                     AppRoutes.eventDetail,

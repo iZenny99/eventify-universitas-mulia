@@ -39,7 +39,7 @@ class _EventFormScreenState extends State<EventFormScreen> {
   String? _selectedCategoryId;
   Uint8List? _posterBytes;
   String? _posterFileName;
-  static const String _storageBucket = 'event-assets';
+  static const String _storageBucket = 'event_assets';
 
   @override
   void initState() {
@@ -109,7 +109,7 @@ class _EventFormScreenState extends State<EventFormScreen> {
     } catch (e) {
       final message = e.toString().toLowerCase();
       if (message.contains('bucket') && message.contains('not found')) {
-        throw Exception('Bucket $_storageBucket tidak ditemukan.');
+        throw Exception('Bucket "$_storageBucket" tidak ditemukan di Supabase. Silakan buat bucket storage baru bernama "$_storageBucket" dan set menjadi Public.');
       }
       rethrow;
     }
@@ -205,12 +205,32 @@ class _EventFormScreenState extends State<EventFormScreen> {
         if (existing.isNotEmpty) {
           categoryId = existing.first['id']?.toString();
         } else {
-          final newCat = await supabase
-              .from('event_categories')
-              .insert({'name': customCategory})
-              .select()
-              .single();
-          categoryId = newCat['id']?.toString();
+          try {
+            final newCat = await supabase
+                .from('event_categories')
+                .insert({'name': customCategory, 'is_active': true})
+                .select('id')
+                .single();
+            categoryId = newCat['id']?.toString();
+          } catch (e) {
+            // Jika gagal (kemungkinan duplikat nama yang is_active = false)
+            final existingDb = await supabase
+                .from('event_categories')
+                .select('id')
+                .ilike('name', customCategory)
+                .maybeSingle();
+            
+            if (existingDb != null) {
+              categoryId = existingDb['id']?.toString();
+              // Aktifkan kembali kategori tersebut
+              await supabase
+                  .from('event_categories')
+                  .update({'is_active': true})
+                  .eq('id', categoryId!);
+            } else {
+              rethrow;
+            }
+          }
         }
       }
 
@@ -242,7 +262,7 @@ class _EventFormScreenState extends State<EventFormScreen> {
         if (posterUrl != null) _posterUrlCtrl.text = posterUrl;
       }
 
-      final event = await supabase
+      await supabase
           .from('events')
           .insert({
             'title': _titleCtrl.text,

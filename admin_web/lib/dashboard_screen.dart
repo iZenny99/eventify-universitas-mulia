@@ -170,11 +170,13 @@ class _OverviewViewState extends State<OverviewView> {
     final users = await adminClient.from('profiles').select('id');
     final registrations = await adminClient
         .from('event_registrations')
-        .select('id');
+        .select('id')
+        .neq('status', 'cancelled');
 
     final latestRegs = await adminClient
         .from('event_registrations')
         .select('status, registered_at, profiles(full_name), events(title)')
+        .neq('status', 'cancelled')
         .order('registered_at', ascending: false)
         .limit(10);
 
@@ -519,6 +521,7 @@ class _EventManagementViewState extends State<EventManagementView> {
           '*, profiles(full_name, email, nim, faculty, major, academic_year, phone_number), registration_form_answers(answer_text, event_form_fields(label))',
         )
         .eq('event_id', eventId)
+        .neq('status', 'cancelled')
         .order('registered_at', ascending: false);
 
     return (response as List)
