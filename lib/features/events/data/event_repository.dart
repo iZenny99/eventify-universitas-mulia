@@ -37,4 +37,22 @@ class EventRepository {
       return ['Semua'];
     }
   }
+
+  Future<EventModel?> getFeaturedEvent() async {
+    try {
+      final response = await _supabase
+          .from(AppTables.events)
+          .select()
+          .eq('status', 'published')
+          .not('banner_url', 'is', null)
+          .order('created_at', ascending: false)
+          .limit(1);
+
+      final rows = response as List;
+      if (rows.isEmpty) return null;
+      return EventModel.fromJson(rows.first as Map<String, dynamic>);
+    } catch (_) {
+      return null;
+    }
+  }
 }

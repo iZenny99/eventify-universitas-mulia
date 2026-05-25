@@ -6,6 +6,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../../core/utils/date_formatter.dart';
 import '../../../../shared/theme/app_colors.dart';
 import '../../../../shared/widgets/primary_button.dart';
+import '../../data/comment_repository.dart';
+import '../../domain/event_comment.dart';
 import '../../domain/event_model.dart';
 
 class EventDetailScreen extends StatefulWidget {
@@ -19,15 +21,29 @@ class EventDetailScreen extends StatefulWidget {
 
 class _EventDetailScreenState extends State<EventDetailScreen> {
   final SupabaseClient _supabase = Supabase.instance.client;
+  final CommentRepository _commentRepository = CommentRepository();
+  final TextEditingController _commentController = TextEditingController();
   Map<String, dynamic>? _registration;
   int _confirmedCount = 0;
   bool _isLoadingAction = false;
+  bool _isLoadingComments = false;
+  bool _isSubmittingComment = false;
+  bool _canComment = false;
+  List<EventComment> _comments = [];
 
   @override
   void initState() {
     super.initState();
     _loadRegistrationState();
     _loadConfirmedCount();
+    _loadComments();
+    _loadCommentAccess();
+  }
+
+  @override
+  void dispose() {
+    _commentController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadRegistrationState() async {
@@ -60,6 +76,48 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
     setState(() => _confirmedCount = (rows as List).length);
   }
 
+  Future<void> _loadComments() async {
+    final eventId = widget.event?.id;
+    if (eventId == null) return;
+
+    if (mounted) setState(() => _isLoadingComments = true);
+    try {
+      final comments = await _commentRepository.getCommentsByEvent(eventId);
+      if (!mounted) return;
+      setState(() => _comments = comments);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Gagal memuat komentar.')));
+    } finally {
+      if (mounted) setState(() => _isLoadingComments = false);
+    }
+  }
+
+  Future<void> _loadCommentAccess() async {
+    final eventId = widget.event?.id;
+    if (eventId == null) return;
+
+    final user = _supabase.auth.currentUser;
+    if (user == null) {
+      if (mounted) setState(() => _canComment = false);
+      return;
+    }
+
+    try {
+      final canComment = await _commentRepository.canUserComment(
+        eventId: eventId,
+        userId: user.id,
+      );
+      if (!mounted) return;
+      setState(() => _canComment = canComment);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _canComment = false);
+    }
+  }
+
   bool get _isLoggedIn => _supabase.auth.currentUser != null;
 
   String? get _registrationStatus => _registration?['status'] as String?;
@@ -67,6 +125,17 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
   bool get _isCancelled => _registrationStatus == 'cancelled';
 
   bool get _isRegistered => _registration != null && !_isCancelled;
+
+  EventComment? get _currentUserComment {
+    final userId = _supabase.auth.currentUser?.id;
+    if (userId == null) return null;
+
+    for (final comment in _comments) {
+      if (comment.userId == userId) return comment;
+    }
+
+    return null;
+  }
 
   Future<void> _handleRegister(EventModel data) async {
     if (_isLoadingAction) return;
@@ -138,9 +207,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
     } else {
       registration = await _supabase
           .from('event_registrations')
-          .update({
-            'status': 'confirmed',
-          })
+          .update({'status': 'confirmed'})
           .eq('id', _registration!['id'])
           .select()
           .single();
@@ -160,7 +227,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
     }
 
     if (!mounted) return;
-    
+
     // Matikan loading sebelum menampilkan dialog (agar tidak crash mouse tracker)
     setState(() => _isLoadingAction = false);
 
@@ -168,12 +235,13 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
         registration['qr_code']?.toString() ??
         registration['id']?.toString() ??
         '-';
-        
+
     await _showQrDialog(qrValue, data.title);
-    
+
     // Load ulang status layar
     await _loadRegistrationState();
     await _loadConfirmedCount();
+    await _loadCommentAccess();
   }
 
   Future<Map<String, String>?> _showRegistrationForm({
@@ -195,137 +263,187 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
-            return AlertDialog(
-              title: const Text('Form Pendaftaran'),
-              content: SizedBox(
-                width: double.maxFinite,
-                child: SingleChildScrollView(
+            return Dialog(
+              insetPadding: const EdgeInsets.symmetric(
+                horizontal: 20,
+                vertical: 24,
+              ),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(
+                  maxWidth: 520,
+                  maxHeight: 560,
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
-                    children: fields.map<Widget>((field) {
-                    final id = field['id'] as String;
-                    final label = field['label']?.toString() ?? 'Field';
-                    final type = field['field_type']?.toString() ?? 'text';
-                    final isRequired = field['is_required'] == true;
-
-                    if (type == 'dropdown') {
-                      final options =
-                          (field['options'] as List?)?.cast<dynamic>() ?? [];
-                      final items = options
-                          .map(
-                            (opt) => DropdownMenuItem<String>(
-                              value: opt.toString(),
-                              child: Text(opt.toString()),
-                            ),
-                          )
-                          .toList();
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: DropdownButtonFormField<String>(
-                          initialValue: dropdownValues[id],
-                          items: items,
-                          decoration: InputDecoration(
-                            labelText: isRequired ? '$label *' : label,
-                          ),
-                          onChanged: (value) => setDialogState(() {
-                            dropdownValues[id] = value;
-                          }),
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Form Pendaftaran',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
                         ),
-                      );
-                    }
-
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: TextField(
-                        controller: controllers[id],
-                        decoration: InputDecoration(
-                          labelText: isRequired ? '$label *' : label,
-                        ),
-                        keyboardType: type == 'number'
-                            ? TextInputType.number
-                            : type == 'email'
-                            ? TextInputType.emailAddress
-                            : type == 'phone'
-                            ? TextInputType.phone
-                            : TextInputType.text,
-                        maxLines: type == 'textarea' ? 3 : 1,
                       ),
-                    );
-                  }).toList(),
+                      const SizedBox(height: 12),
+                      Flexible(
+                        child: SingleChildScrollView(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: fields.map<Widget>((field) {
+                              final id = field['id'] as String;
+                              final label =
+                                  field['label']?.toString() ?? 'Field';
+                              final type =
+                                  field['field_type']?.toString() ?? 'text';
+                              final isRequired = field['is_required'] == true;
+
+                              if (type == 'dropdown') {
+                                final options =
+                                    (field['options'] as List?)
+                                        ?.cast<dynamic>() ??
+                                    [];
+                                final items = options
+                                    .map(
+                                      (opt) => DropdownMenuItem<String>(
+                                        value: opt.toString(),
+                                        child: Text(opt.toString()),
+                                      ),
+                                    )
+                                    .toList();
+                                return Padding(
+                                  padding: const EdgeInsets.only(bottom: 12),
+                                  child: DropdownButtonFormField<String>(
+                                    initialValue: dropdownValues[id],
+                                    items: items,
+                                    decoration: InputDecoration(
+                                      labelText: isRequired
+                                          ? '$label *'
+                                          : label,
+                                    ),
+                                    onChanged: (value) => setDialogState(() {
+                                      dropdownValues[id] = value;
+                                    }),
+                                  ),
+                                );
+                              }
+
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 12),
+                                child: TextField(
+                                  controller: controllers[id],
+                                  decoration: InputDecoration(
+                                    labelText: isRequired ? '$label *' : label,
+                                  ),
+                                  keyboardType: type == 'number'
+                                      ? TextInputType.number
+                                      : type == 'email'
+                                      ? TextInputType.emailAddress
+                                      : type == 'phone'
+                                      ? TextInputType.phone
+                                      : TextInputType.text,
+                                  maxLines: type == 'textarea' ? 3 : 1,
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text('Batal'),
+                          ),
+                          const SizedBox(width: 8),
+                          ElevatedButton(
+                            onPressed: () {
+                              final answers = <String, String>{};
+                              bool hasError = false;
+
+                              for (final field in fields) {
+                                final id = field['id'] as String;
+                                final label =
+                                    field['label']?.toString() ?? 'Field';
+                                final type =
+                                    field['field_type']?.toString() ?? 'text';
+                                final isRequired = field['is_required'] == true;
+                                final value = type == 'dropdown'
+                                    ? dropdownValues[id]
+                                    : controllers[id]?.text.trim();
+
+                                if (isRequired &&
+                                    (value == null || value.isEmpty)) {
+                                  hasError = true;
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('$label wajib diisi.'),
+                                    ),
+                                  );
+                                  break;
+                                }
+
+                                if (value != null && value.isNotEmpty) {
+                                  if (type == 'email' &&
+                                      !_isValidEmail(value)) {
+                                    hasError = true;
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          'Email untuk $label tidak valid.',
+                                        ),
+                                      ),
+                                    );
+                                    break;
+                                  }
+
+                                  if (type == 'number' &&
+                                      !_isValidNumber(value)) {
+                                    hasError = true;
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          '$label harus berupa angka.',
+                                        ),
+                                      ),
+                                    );
+                                    break;
+                                  }
+
+                                  if (type == 'phone' &&
+                                      !_isValidPhone(value)) {
+                                    hasError = true;
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          'No HP pada $label tidak valid.',
+                                        ),
+                                      ),
+                                    );
+                                    break;
+                                  }
+                                }
+
+                                if (value != null && value.isNotEmpty) {
+                                  answers[id] = value;
+                                }
+                              }
+
+                              if (!hasError) {
+                                Navigator.pop(context, answers);
+                              }
+                            },
+                            child: const Text('Kirim'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-            actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Batal'),
-                ),
-                ElevatedButton(
-                  onPressed: () {
-                    final answers = <String, String>{};
-                    bool hasError = false;
-
-                    for (final field in fields) {
-                      final id = field['id'] as String;
-                      final label = field['label']?.toString() ?? 'Field';
-                      final type = field['field_type']?.toString() ?? 'text';
-                      final isRequired = field['is_required'] == true;
-                      final value = type == 'dropdown'
-                          ? dropdownValues[id]
-                          : controllers[id]?.text.trim();
-
-                      if (isRequired && (value == null || value.isEmpty)) {
-                        hasError = true;
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('$label wajib diisi.')),
-                        );
-                        break;
-                      }
-
-                      if (value != null && value.isNotEmpty) {
-                        if (type == 'email' && !_isValidEmail(value)) {
-                          hasError = true;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Email untuk $label tidak valid.'),
-                            ),
-                          );
-                          break;
-                        }
-
-                        if (type == 'number' && !_isValidNumber(value)) {
-                          hasError = true;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('$label harus berupa angka.'),
-                            ),
-                          );
-                          break;
-                        }
-
-                        if (type == 'phone' && !_isValidPhone(value)) {
-                          hasError = true;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('No HP pada $label tidak valid.'),
-                            ),
-                          );
-                          break;
-                        }
-                      }
-
-                      if (value != null && value.isNotEmpty) {
-                        answers[id] = value;
-                      }
-                    }
-
-                    if (!hasError) {
-                      Navigator.pop(context, answers);
-                    }
-                  },
-                  child: const Text('Kirim'),
-                ),
-              ],
             );
           },
         );
@@ -422,7 +540,10 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
               onPressed: () => Navigator.pop(context, true),
-              child: const Text('Ya, Batalkan', style: TextStyle(color: Colors.white)),
+              child: const Text(
+                'Ya, Batalkan',
+                style: TextStyle(color: Colors.white),
+              ),
             ),
           ],
         );
@@ -447,11 +568,12 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
       ).showSnackBar(const SnackBar(content: Text('Pendaftaran dibatalkan.')));
       await _loadRegistrationState();
       await _loadConfirmedCount();
+      await _loadCommentAccess();
     } on PostgrestException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Gagal: ${e.message} (Cek RLS Database)')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Gagal: ${e.message} (Cek RLS Database)')),
+      );
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -459,6 +581,96 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
       ).showSnackBar(const SnackBar(content: Text('Gagal membatalkan.')));
     } finally {
       if (mounted) setState(() => _isLoadingAction = false);
+    }
+  }
+
+  Future<void> _handleSubmitComment() async {
+    if (_isSubmittingComment) return;
+
+    final user = _supabase.auth.currentUser;
+    final eventId = widget.event?.id;
+    if (user == null || eventId == null) return;
+
+    final text = _commentController.text.trim();
+    if (text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Komentar tidak boleh kosong.')),
+      );
+      return;
+    }
+
+    setState(() => _isSubmittingComment = true);
+    try {
+      await _commentRepository.addComment(
+        eventId: eventId,
+        userId: user.id,
+        commentText: text,
+      );
+      _commentController.clear();
+      await _loadComments();
+    } on PostgrestException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Gagal: ${e.message}')));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Gagal mengirim komentar.')));
+    } finally {
+      if (mounted) setState(() => _isSubmittingComment = false);
+    }
+  }
+
+  Future<void> _handleDeleteComment(EventComment comment) async {
+    if (_isSubmittingComment) return;
+
+    final user = _supabase.auth.currentUser;
+    if (user == null) return;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Hapus komentar?'),
+          content: const Text('Komentar akan disembunyikan dari publik.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Batal'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Hapus', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirm != true) return;
+
+    setState(() => _isSubmittingComment = true);
+    try {
+      await _commentRepository.deleteComment(
+        commentId: comment.id,
+        userId: user.id,
+      );
+      await _loadComments();
+    } on PostgrestException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Gagal: ${e.message}')));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Gagal menghapus komentar.')),
+      );
+    } finally {
+      if (mounted) setState(() => _isSubmittingComment = false);
     }
   }
 
@@ -478,6 +690,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
         : (maxParticipants - _confirmedCount).clamp(0, maxParticipants);
     final isFull = remaining != null && remaining <= 0;
     final isPublished = data.status == 'published';
+    final currentUserComment = _currentUserComment;
 
     String buttonLabel;
     VoidCallback? buttonAction;
@@ -706,6 +919,12 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                       height: 1.6,
                     ),
                   ),
+                  const SizedBox(height: 32),
+                  _buildCommentsSection(
+                    context: context,
+                    textTheme: textTheme,
+                    currentUserComment: currentUserComment,
+                  ),
                   const SizedBox(height: 100),
                 ],
               ),
@@ -785,5 +1004,227 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
         ],
       ),
     );
+  }
+
+  Widget _buildCommentsSection({
+    required BuildContext context,
+    required TextTheme textTheme,
+    required EventComment? currentUserComment,
+  }) {
+    final userId = _supabase.auth.currentUser?.id;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Komentar',
+          style: textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+        ),
+        const SizedBox(height: 12),
+        if (_isLoadingComments)
+          const Center(
+            child: Padding(
+              padding: EdgeInsets.symmetric(vertical: 16),
+              child: CircularProgressIndicator(),
+            ),
+          )
+        else if (_comments.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Text(
+              'Belum ada komentar.',
+              style: textTheme.bodyMedium?.copyWith(
+                color: AppColors.textSecondary,
+              ),
+            ),
+          )
+        else
+          ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: _comments.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 12),
+            itemBuilder: (context, index) {
+              final comment = _comments[index];
+              final isOwn = userId != null && comment.userId == userId;
+              return _buildCommentItem(comment, isOwn: isOwn);
+            },
+          ),
+        const SizedBox(height: 16),
+        if (!_isLoggedIn)
+          _buildCommentHint('Login untuk memberikan komentar.')
+        else if (!_canComment)
+          _buildCommentHint('Hanya peserta yang bisa memberikan komentar.')
+        else if (currentUserComment != null)
+          _buildCommentHint('Kamu sudah memberikan komentar.')
+        else
+          _buildCommentForm(),
+      ],
+    );
+  }
+
+  Widget _buildCommentItem(EventComment comment, {required bool isOwn}) {
+    final name = comment.userFullName ?? 'Pengguna';
+    final avatarUrl = comment.userAvatarUrl;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.divider),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              CircleAvatar(
+                radius: 18,
+                backgroundColor: AppColors.primary.withValues(alpha: 0.12),
+                backgroundImage: avatarUrl == null
+                    ? null
+                    : NetworkImage(avatarUrl),
+                child: avatarUrl == null
+                    ? Text(
+                        _buildInitials(name),
+                        style: TextStyle(
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 12,
+                        ),
+                      )
+                    : null,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name,
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      DateFormatter.formatShort(comment.createdAt),
+                      style: TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (comment.rating != null)
+                Row(
+                  children: [
+                    Icon(
+                      Icons.star_rounded,
+                      size: 16,
+                      color: AppColors.warning,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${comment.rating}/5',
+                      style: TextStyle(
+                        color: AppColors.textSecondary,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            comment.commentText,
+            style: TextStyle(color: AppColors.textPrimary, height: 1.5),
+          ),
+          if (isOwn) ...[
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                onPressed: _isSubmittingComment
+                    ? null
+                    : () => _handleDeleteComment(comment),
+                child: Text('Hapus', style: TextStyle(color: AppColors.error)),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCommentForm() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextField(
+          controller: _commentController,
+          maxLines: 3,
+          decoration: InputDecoration(
+            hintText: 'Tulis komentar kamu...',
+            filled: true,
+            fillColor: AppColors.surface,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: AppColors.divider),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: AppColors.divider),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: AppColors.primary, width: 1.5),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Align(
+          alignment: Alignment.centerRight,
+          child: ElevatedButton(
+            onPressed: _isSubmittingComment ? null : _handleSubmitComment,
+            child: _isSubmittingComment
+                ? const SizedBox(
+                    height: 18,
+                    width: 18,
+                    child: CircularProgressIndicator(color: Colors.white),
+                  )
+                : const Text('Kirim'),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCommentHint(String message) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.divider),
+      ),
+      child: Text(message, style: TextStyle(color: AppColors.textSecondary)),
+    );
+  }
+
+  String _buildInitials(String name) {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) return '-';
+
+    final parts = trimmed.split(' ');
+    if (parts.length == 1) return parts.first.substring(0, 1).toUpperCase();
+
+    final first = parts.first.isNotEmpty ? parts.first[0] : '';
+    final last = parts.last.isNotEmpty ? parts.last[0] : '';
+    return '$first$last'.toUpperCase();
   }
 }

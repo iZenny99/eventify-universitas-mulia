@@ -7,5 +7,6 @@ class AppTables {
   static const certificates = 'certificates';
   static const formFields = 'event_form_fields';
   static const formAnswers = 'registration_form_answers';
+  static const eventComments = 'event_comments';
   static const upcomingEvents = 'view_upcoming_events';
 }

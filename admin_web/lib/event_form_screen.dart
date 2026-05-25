@@ -1,4 +1,8 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
 import 'theme.dart';
 import 'main.dart';
 
@@ -21,6 +25,7 @@ class _EventFormScreenState extends State<EventFormScreen> {
   final _locationCtrl = TextEditingController();
   final _posterUrlCtrl = TextEditingController();
   final _maxParticipantsCtrl = TextEditingController();
+  final _customCategoryCtrl = TextEditingController();
 
   DateTime? _startDate;
   DateTime? _endDate;
@@ -28,6 +33,89 @@ class _EventFormScreenState extends State<EventFormScreen> {
   TimeOfDay? _endTime;
 
   bool _isLoading = false;
+  bool _isLoadingCategories = true;
+
+  List<Map<String, dynamic>> _categories = [];
+  String? _selectedCategoryId;
+  Uint8List? _posterBytes;
+  String? _posterFileName;
+  static const String _storageBucket = 'event-assets';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCategories();
+  }
+
+  @override
+  void dispose() {
+    _titleCtrl.dispose();
+    _slugCtrl.dispose();
+    _shortDescCtrl.dispose();
+    _descCtrl.dispose();
+    _locationCtrl.dispose();
+    _posterUrlCtrl.dispose();
+    _maxParticipantsCtrl.dispose();
+    _customCategoryCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadCategories() async {
+    try {
+      final rows = await adminClient
+          .from('event_categories')
+          .select('id, name')
+          .eq('is_active', true)
+          .order('name');
+
+      if (!mounted) return;
+      setState(() {
+        _categories = (rows as List)
+            .map((item) => Map<String, dynamic>.from(item as Map))
+            .toList();
+        _isLoadingCategories = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _isLoadingCategories = false);
+    }
+  }
+
+  Future<PlatformFile?> _pickImage() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.image,
+      withData: true,
+    );
+
+    if (result == null || result.files.isEmpty) return null;
+    return result.files.first;
+  }
+
+  Future<String?> _uploadImage({
+    required Uint8List bytes,
+    required String fileName,
+    required String folder,
+  }) async {
+    final slug = _slugCtrl.text.trim().isEmpty
+        ? _titleCtrl.text.trim().toLowerCase().replaceAll(' ', '-')
+        : _slugCtrl.text.trim();
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final path = 'events/$slug/$folder-$timestamp-$fileName';
+
+    try {
+      await adminClient.storage
+          .from(_storageBucket)
+          .uploadBinary(path, bytes, fileOptions: const FileOptions());
+    } catch (e) {
+      final message = e.toString().toLowerCase();
+      if (message.contains('bucket') && message.contains('not found')) {
+        throw Exception('Bucket $_storageBucket tidak ditemukan.');
+      }
+      rethrow;
+    }
+
+    return adminClient.storage.from(_storageBucket).getPublicUrl(path);
+  }
 
   Future<void> _selectDate(bool isStart) async {
     final picked = await showDatePicker(
@@ -63,6 +151,25 @@ class _EventFormScreenState extends State<EventFormScreen> {
     }
   }
 
+  Future<void> _handlePickPoster() async {
+    final file = await _pickImage();
+    if (file == null || file.bytes == null) return;
+
+    setState(() {
+      _posterBytes = file.bytes;
+      _posterFileName = file.name;
+      _posterUrlCtrl.text = file.name;
+    });
+  }
+
+  void _clearPoster() {
+    setState(() {
+      _posterBytes = null;
+      _posterFileName = null;
+      _posterUrlCtrl.clear();
+    });
+  }
+
   Future<void> _saveEvent() async {
     if (!_formKey.currentState!.validate()) return;
     if (_startDate == null ||
@@ -75,22 +182,36 @@ class _EventFormScreenState extends State<EventFormScreen> {
       return;
     }
 
+    final customCategory = _customCategoryCtrl.text.trim();
+    if ((_selectedCategoryId == null || _selectedCategoryId!.isEmpty) &&
+        customCategory.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Pilih kategori atau isi kategori baru.')),
+      );
+      return;
+    }
+
     setState(() => _isLoading = true);
 
     try {
       final supabase = adminClient;
+      String? categoryId = _selectedCategoryId;
+      if (customCategory.isNotEmpty) {
+        final existing = _categories.where((item) {
+          final name = item['name']?.toString().toLowerCase() ?? '';
+          return name == customCategory.toLowerCase();
+        }).toList();
 
-      // Auto-create category if empty
-      var catRes = await supabase.from('event_categories').select().limit(1);
-      String? categoryId;
-      if (catRes.isEmpty) {
-        final newCat = await supabase.from('event_categories').insert({
-          'name': 'Seminar',
-          'color_hex': '#6C63FF',
-        }).select();
-        categoryId = newCat[0]['id'];
-      } else {
-        categoryId = catRes[0]['id'];
+        if (existing.isNotEmpty) {
+          categoryId = existing.first['id']?.toString();
+        } else {
+          final newCat = await supabase
+              .from('event_categories')
+              .insert({'name': customCategory})
+              .select()
+              .single();
+          categoryId = newCat['id']?.toString();
+        }
       }
 
       // Auto-create organizer if empty
@@ -109,6 +230,18 @@ class _EventFormScreenState extends State<EventFormScreen> {
       String formatTime(TimeOfDay t) =>
           '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}:00';
 
+      String? posterUrl = _posterUrlCtrl.text.trim().isEmpty
+          ? null
+          : _posterUrlCtrl.text.trim();
+      if (_posterBytes != null && _posterFileName != null) {
+        posterUrl = await _uploadImage(
+          bytes: _posterBytes!,
+          fileName: _posterFileName!,
+          folder: 'poster',
+        );
+        if (posterUrl != null) _posterUrlCtrl.text = posterUrl;
+      }
+
       final event = await supabase
           .from('events')
           .insert({
@@ -117,9 +250,7 @@ class _EventFormScreenState extends State<EventFormScreen> {
             'short_description': _shortDescCtrl.text,
             'description': _descCtrl.text,
             'location_name': _locationCtrl.text,
-            'poster_url': _posterUrlCtrl.text.isEmpty
-                ? null
-                : _posterUrlCtrl.text,
+            'poster_url': posterUrl,
             'start_date': _startDate!.toIso8601String().split('T')[0],
             'end_date': _endDate!.toIso8601String().split('T')[0],
             'start_time': formatTime(_startTime!),
@@ -133,23 +264,6 @@ class _EventFormScreenState extends State<EventFormScreen> {
           })
           .select()
           .single();
-
-      await supabase.from('event_form_fields').insert([
-        {
-          'event_id': event['id'],
-          'label': 'Nama Lengkap',
-          'field_type': 'text',
-          'is_required': true,
-          'sort_order': 1,
-        },
-        {
-          'event_id': event['id'],
-          'label': 'NIM',
-          'field_type': 'text',
-          'is_required': true,
-          'sort_order': 2,
-        },
-      ]);
 
       if (mounted) {
         ScaffoldMessenger.of(
@@ -166,6 +280,79 @@ class _EventFormScreenState extends State<EventFormScreen> {
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  Widget _buildImagePickerCard({
+    required String title,
+    required Uint8List? bytes,
+    required String? url,
+    required String? fileName,
+    required VoidCallback onPick,
+    required VoidCallback onClear,
+  }) {
+    final hasPreview = bytes != null || (url != null && url.startsWith('http'));
+    final preview = bytes != null
+        ? Image.memory(bytes, fit: BoxFit.cover, width: double.infinity)
+        : (url != null && url.startsWith('http')
+              ? Image.network(url, fit: BoxFit.cover, width: double.infinity)
+              : null);
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppTheme.divider),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
+          const SizedBox(height: 12),
+          Container(
+            height: 160,
+            decoration: BoxDecoration(
+              color: AppTheme.background,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppTheme.divider),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: hasPreview
+                  ? preview
+                  : Center(
+                      child: Text(
+                        'Belum ada gambar',
+                        style: TextStyle(color: AppTheme.textSecondary),
+                      ),
+                    ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            fileName ?? (url?.isNotEmpty == true ? url! : 'Tidak ada file'),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              ElevatedButton.icon(
+                onPressed: onPick,
+                icon: const Icon(Icons.upload_rounded, size: 18),
+                label: const Text('Unggah'),
+              ),
+              const SizedBox(width: 12),
+              TextButton(
+                onPressed: hasPreview ? onClear : null,
+                child: const Text('Hapus'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -233,6 +420,40 @@ class _EventFormScreenState extends State<EventFormScreen> {
                           labelText: 'URL Slug (contoh: seminar-tech-2026)',
                         ),
                         validator: (v) => v!.isEmpty ? 'Wajib diisi' : null,
+                      ),
+                      const SizedBox(height: 16),
+                      _isLoadingCategories
+                          ? const LinearProgressIndicator(minHeight: 2)
+                          : DropdownButtonFormField<String>(
+                              key: ValueKey(_selectedCategoryId),
+                              initialValue: _selectedCategoryId,
+                              items: _categories
+                                  .map(
+                                    (cat) => DropdownMenuItem<String>(
+                                      value: cat['id']?.toString(),
+                                      child: Text(
+                                        cat['name']?.toString() ?? '-',
+                                      ),
+                                    ),
+                                  )
+                                  .toList(),
+                              onChanged: _categories.isEmpty
+                                  ? null
+                                  : (value) => setState(() {
+                                      _selectedCategoryId = value;
+                                    }),
+                              decoration: const InputDecoration(
+                                labelText: 'Kategori Event',
+                                hintText: 'Pilih kategori yang tersedia',
+                              ),
+                            ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: _customCategoryCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Kategori Baru (Opsional)',
+                          hintText: 'Isi jika kategori tidak ada di daftar',
+                        ),
                       ),
                       const SizedBox(height: 16),
                       Row(
@@ -325,13 +546,24 @@ class _EventFormScreenState extends State<EventFormScreen> {
                               'Kuota Peserta (Kosongkan jika tak terbatas)',
                         ),
                         keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                        ],
                       ),
                       const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _posterUrlCtrl,
-                        decoration: const InputDecoration(
-                          labelText: 'URL Poster (Image Link)',
-                        ),
+                      Text(
+                        'Media Event',
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 12),
+                      _buildImagePickerCard(
+                        title: 'Gambar Event',
+                        bytes: _posterBytes,
+                        url: _posterUrlCtrl.text.trim(),
+                        fileName: _posterFileName,
+                        onPick: _handlePickPoster,
+                        onClear: _clearPoster,
                       ),
                       const SizedBox(height: 32),
                       SizedBox(
