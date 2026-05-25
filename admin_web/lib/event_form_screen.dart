@@ -41,6 +41,8 @@ class _EventFormScreenState extends State<EventFormScreen> {
   String? _posterFileName;
   static const String _storageBucket = 'event_assets';
 
+  final List<Map<String, dynamic>> _customFields = [];
+
   @override
   void initState() {
     super.initState();
@@ -170,6 +172,94 @@ class _EventFormScreenState extends State<EventFormScreen> {
     });
   }
 
+  void _showAddFieldDialog() {
+    String label = '';
+    String type = 'text';
+    bool isRequired = true;
+    String options = '';
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Tambah Kolom Formulir'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      decoration: const InputDecoration(labelText: 'Label Pertanyaan'),
+                      onChanged: (v) => label = v,
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      initialValue: type,
+                      items: const [
+                        DropdownMenuItem(value: 'text', child: Text('Teks Singkat')),
+                        DropdownMenuItem(value: 'textarea', child: Text('Teks Panjang')),
+                        DropdownMenuItem(value: 'email', child: Text('Email')),
+                        DropdownMenuItem(value: 'phone', child: Text('Nomor HP')),
+                        DropdownMenuItem(value: 'number', child: Text('Angka')),
+                        DropdownMenuItem(value: 'dropdown', child: Text('Pilihan (Dropdown)')),
+                      ],
+                      onChanged: (v) {
+                        setDialogState(() {
+                          type = v ?? 'text';
+                        });
+                      },
+                      decoration: const InputDecoration(labelText: 'Tipe Isian'),
+                    ),
+                    if (type == 'dropdown') ...[
+                      const SizedBox(height: 12),
+                      TextField(
+                        decoration: const InputDecoration(
+                          labelText: 'Pilihan (pisahkan dengan koma)',
+                          hintText: 'Contoh: Ukuran S, Ukuran M, Ukuran L',
+                        ),
+                        onChanged: (v) => options = v,
+                      ),
+                    ],
+                    const SizedBox(height: 12),
+                    SwitchListTile(
+                      title: const Text('Wajib Diisi?'),
+                      value: isRequired,
+                      onChanged: (v) => setDialogState(() => isRequired = v),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Batal'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    if (label.trim().isEmpty) return;
+                    setState(() {
+                      _customFields.add({
+                        'label': label.trim(),
+                        'field_type': type,
+                        'is_required': isRequired,
+                        'options': type == 'dropdown'
+                            ? options.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList()
+                            : null,
+                      });
+                    });
+                    Navigator.pop(ctx);
+                  },
+                  child: const Text('Simpan'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   Future<void> _saveEvent() async {
     if (!_formKey.currentState!.validate()) return;
     if (_startDate == null ||
@@ -262,7 +352,7 @@ class _EventFormScreenState extends State<EventFormScreen> {
         if (posterUrl != null) _posterUrlCtrl.text = posterUrl;
       }
 
-      await supabase
+      final eventRes = await supabase
           .from('events')
           .insert({
             'title': _titleCtrl.text,
@@ -284,6 +374,24 @@ class _EventFormScreenState extends State<EventFormScreen> {
           })
           .select()
           .single();
+
+      final eventId = eventRes['id'];
+
+      if (_customFields.isNotEmpty) {
+        final fieldsPayload = [];
+        for (int i = 0; i < _customFields.length; i++) {
+          final f = _customFields[i];
+          fieldsPayload.add({
+            'event_id': eventId,
+            'label': f['label'],
+            'field_type': f['field_type'],
+            'is_required': f['is_required'],
+            'options': f['options'],
+            'sort_order': i,
+          });
+        }
+        await supabase.from('event_form_fields').insert(fieldsPayload);
+      }
 
       if (mounted) {
         ScaffoldMessenger.of(
@@ -585,6 +693,52 @@ class _EventFormScreenState extends State<EventFormScreen> {
                         onPick: _handlePickPoster,
                         onClear: _clearPoster,
                       ),
+                      const SizedBox(height: 32),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Formulir Tambahan',
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(fontWeight: FontWeight.w700),
+                          ),
+                          TextButton.icon(
+                            onPressed: _showAddFieldDialog,
+                            icon: const Icon(Icons.add),
+                            label: const Text('Tambah Field'),
+                          ),
+                        ],
+                      ),
+                      if (_customFields.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 12),
+                          child: Text('Tidak ada formulir tambahan. Pendaftar hanya perlu mengisi nama & email.'),
+                        )
+                      else
+                        ListView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: _customFields.length,
+                          itemBuilder: (context, index) {
+                            final field = _customFields[index];
+                            final optionsStr = (field['options'] as List?)?.join(', ') ?? '';
+                            return Card(
+                              margin: const EdgeInsets.only(bottom: 8),
+                              child: ListTile(
+                                title: Text('${field['label']} ${field['is_required'] ? '*' : ''}'),
+                                subtitle: Text('Tipe: ${field['field_type']}${optionsStr.isNotEmpty ? ' | Pilihan: $optionsStr' : ''}'),
+                                trailing: IconButton(
+                                  icon: const Icon(Icons.delete, color: Colors.red),
+                                  onPressed: () {
+                                    setState(() {
+                                      _customFields.removeAt(index);
+                                    });
+                                  },
+                                ),
+                              ),
+                            );
+                          },
+                        ),
                       const SizedBox(height: 32),
                       SizedBox(
                         width: double.infinity,

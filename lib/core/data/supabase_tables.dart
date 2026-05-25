@@ -9,4 +9,5 @@ class AppTables {
   static const formAnswers = 'registration_form_answers';
   static const eventComments = 'event_comments';
   static const upcomingEvents = 'view_upcoming_events';
+  static const notifications = 'notifications';
 }

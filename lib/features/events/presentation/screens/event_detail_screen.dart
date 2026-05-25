@@ -30,6 +30,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
   bool _isSubmittingComment = false;
   bool _canComment = false;
   List<EventComment> _comments = [];
+  EventComment? _editingComment;
 
   @override
   void initState() {
@@ -126,17 +127,6 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
 
   bool get _isRegistered => _registration != null && !_isCancelled;
 
-  EventComment? get _currentUserComment {
-    final userId = _supabase.auth.currentUser?.id;
-    if (userId == null) return null;
-
-    for (final comment in _comments) {
-      if (comment.userId == userId) return comment;
-    }
-
-    return null;
-  }
-
   Future<void> _handleRegister(EventModel data) async {
     if (_isLoadingAction) return;
     final user = _supabase.auth.currentUser;
@@ -168,7 +158,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
     if (!mounted) return;
     
     Map<String, String>? answers;
-    if (fields.isEmpty) {
+    if (fields.isEmpty || _registration != null) {
       answers = {};
     } else {
       await Future.delayed(const Duration(milliseconds: 100));
@@ -251,12 +241,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
         registration['id']?.toString() ??
         '-';
 
-    // Beri jeda agar UI Flutter selesai merender state sebelum memunculkan dialog 
-    // Ini mencegah error "mouse_tracker" dan freeze di mobile
-    await Future.delayed(const Duration(milliseconds: 150));
-
-    if (!mounted) return;
-    await _showQrDialog(qrValue, data.title);
+    final isFirstRegistration = _registration == null;
 
     if (mounted) {
       setState(() => _isLoadingAction = false);
@@ -266,6 +251,19 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
     await _loadRegistrationState();
     await _loadConfirmedCount();
     await _loadCommentAccess();
+
+    if (isFirstRegistration) {
+      // Show QR in next frame to prevent freeze on first registration
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _showQrDialog(qrValue, data.title);
+      });
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Berhasil mendaftar kembali! Tiket dapat dilihat di profil Anda.')),
+        );
+      }
+    }
   }
 
   Future<Map<String, String>?> _showRegistrationForm({
@@ -383,8 +381,13 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                             child: const Text('Batal'),
                           ),
                           const SizedBox(width: 8),
-                          ElevatedButton(
-                            onPressed: () {
+                          SizedBox(
+                            width: 120,
+                            child: ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                minimumSize: const Size(0, 48),
+                              ),
+                              onPressed: () {
                               final answers = <String, String>{};
                               bool hasError = false;
 
@@ -462,6 +465,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                             },
                             child: const Text('Kirim'),
                           ),
+                        ),
                         ],
                       ),
                     ],
@@ -561,12 +565,18 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
               onPressed: () => Navigator.pop(context, false),
               child: const Text('Tidak'),
             ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text(
-                'Ya, Batalkan',
-                style: TextStyle(color: Colors.white),
+            SizedBox(
+              width: 140,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.error,
+                  minimumSize: const Size(0, 48),
+                ),
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text(
+                  'Ya, Batalkan',
+                  style: TextStyle(color: Colors.white),
+                ),
               ),
             ),
           ],
@@ -625,12 +635,22 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
 
     setState(() => _isSubmittingComment = true);
     try {
-      await _commentRepository.addComment(
-        eventId: eventId,
-        userId: user.id,
-        commentText: text,
-      );
+      if (_editingComment != null) {
+        await _commentRepository.updateComment(
+          commentId: _editingComment!.id,
+          userId: user.id,
+          commentText: text,
+          eventId: eventId,
+        );
+      } else {
+        await _commentRepository.addComment(
+          eventId: eventId,
+          userId: user.id,
+          commentText: text,
+        );
+      }
       _commentController.clear();
+      _editingComment = null;
       await _loadComments();
     } on PostgrestException catch (e) {
       if (!mounted) return;
@@ -714,7 +734,6 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
         : (maxParticipants - _confirmedCount).clamp(0, maxParticipants);
     final isFull = remaining != null && remaining <= 0;
     final isPublished = data.status == 'published';
-    final currentUserComment = _currentUserComment;
 
     String buttonLabel;
     VoidCallback? buttonAction;
@@ -947,7 +966,6 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                   _buildCommentsSection(
                     context: context,
                     textTheme: textTheme,
-                    currentUserComment: currentUserComment,
                   ),
                   const SizedBox(height: 100),
                 ],
@@ -1033,7 +1051,6 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
   Widget _buildCommentsSection({
     required BuildContext context,
     required TextTheme textTheme,
-    required EventComment? currentUserComment,
   }) {
     final userId = _supabase.auth.currentUser?.id;
 
@@ -1079,8 +1096,6 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
           _buildCommentHint('Login untuk memberikan komentar.')
         else if (!_canComment)
           _buildCommentHint('Hanya peserta yang bisa memberikan komentar.')
-        else if (currentUserComment != null)
-          _buildCommentHint('Kamu sudah memberikan komentar.')
         else
           _buildCommentForm(),
       ],
@@ -1163,23 +1178,79 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
             ],
           ),
           const SizedBox(height: 12),
-          Text(
-            comment.commentText,
-            style: TextStyle(color: AppColors.textPrimary, height: 1.5),
-          ),
+          _buildCommentText(comment.commentText),
           if (isOwn) ...[
             const SizedBox(height: 8),
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton(
-                onPressed: _isSubmittingComment
-                    ? null
-                    : () => _handleDeleteComment(comment),
-                child: Text('Hapus', style: TextStyle(color: AppColors.error)),
-              ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: _isSubmittingComment
+                      ? null
+                      : () {
+                          setState(() {
+                            _editingComment = comment;
+                            _commentController.text = comment.commentText;
+                          });
+                        },
+                  child: Text('Edit', style: TextStyle(color: AppColors.primary)),
+                ),
+                TextButton(
+                  onPressed: _isSubmittingComment
+                      ? null
+                      : () => _handleDeleteComment(comment),
+                  child: Text('Hapus', style: TextStyle(color: AppColors.error)),
+                ),
+              ],
             ),
           ],
         ],
+      ),
+    );
+  }
+
+  Widget _buildCommentText(String text) {
+    final RegExp mentionRegex = RegExp(r'@(\w+)');
+    final Iterable<Match> matches = mentionRegex.allMatches(text);
+
+    if (matches.isEmpty) {
+      return Text(
+        text,
+        style: TextStyle(color: AppColors.textPrimary, height: 1.5),
+      );
+    }
+
+    final List<TextSpan> spans = [];
+    int lastMatchEnd = 0;
+
+    for (final match in matches) {
+      if (match.start > lastMatchEnd) {
+        spans.add(TextSpan(text: text.substring(lastMatchEnd, match.start)));
+      }
+      spans.add(
+        TextSpan(
+          text: match.group(0),
+          style: const TextStyle(
+            color: Colors.blue,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      );
+      lastMatchEnd = match.end;
+    }
+
+    if (lastMatchEnd < text.length) {
+      spans.add(TextSpan(text: text.substring(lastMatchEnd)));
+    }
+
+    return RichText(
+      text: TextSpan(
+        style: TextStyle(
+          color: AppColors.textPrimary,
+          height: 1.5,
+          fontFamily: Theme.of(context).textTheme.bodyMedium?.fontFamily,
+        ),
+        children: spans,
       ),
     );
   }
@@ -1210,18 +1281,39 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
           ),
         ),
         const SizedBox(height: 12),
-        Align(
-          alignment: Alignment.centerRight,
-          child: ElevatedButton(
-            onPressed: _isSubmittingComment ? null : _handleSubmitComment,
-            child: _isSubmittingComment
-                ? const SizedBox(
-                    height: 18,
-                    width: 18,
-                    child: CircularProgressIndicator(color: Colors.white),
-                  )
-                : const Text('Kirim'),
-          ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            if (_editingComment != null)
+              TextButton(
+                onPressed: _isSubmittingComment
+                    ? null
+                    : () {
+                        setState(() {
+                          _editingComment = null;
+                          _commentController.clear();
+                        });
+                      },
+                child: const Text('Batal'),
+              ),
+            const SizedBox(width: 8),
+            SizedBox(
+              width: 120,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  minimumSize: const Size(0, 48),
+                ),
+                onPressed: _isSubmittingComment ? null : _handleSubmitComment,
+                child: _isSubmittingComment
+                    ? const SizedBox(
+                        height: 18,
+                        width: 18,
+                        child: CircularProgressIndicator(color: Colors.white),
+                      )
+                    : Text(_editingComment != null ? 'Perbarui' : 'Kirim'),
+              ),
+            ),
+          ],
         ),
       ],
     );

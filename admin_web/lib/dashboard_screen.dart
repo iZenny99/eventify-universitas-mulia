@@ -285,11 +285,14 @@ class _OverviewViewState extends State<OverviewView> {
                   ];
 
                   if (isCompact) {
+                    final cardWidth = constraints.maxWidth < 600
+                        ? double.infinity
+                        : (constraints.maxWidth - 16) / 2;
                     return Wrap(
                       spacing: 16,
                       runSpacing: 16,
                       children: cards
-                          .map((card) => SizedBox(width: 260, child: card))
+                          .map((card) => SizedBox(width: cardWidth, child: card))
                           .toList(),
                     );
                   }

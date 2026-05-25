@@ -46,9 +46,71 @@ class CommentRepository {
           .select('*, profiles(full_name, avatar_url)')
           .single();
 
+      await _processMentions(commentText, eventId, userId);
+
       return EventComment.fromJson(response);
     } catch (e) {
       rethrow;
+    }
+  }
+
+  Future<EventComment> updateComment({
+    required String commentId,
+    required String userId,
+    required String commentText,
+    required String eventId,
+  }) async {
+    try {
+      final response = await _supabase
+          .from(AppTables.eventComments)
+          .update({'comment_text': commentText.trim()})
+          .eq('id', commentId)
+          .eq('user_id', userId)
+          .select('*, profiles(full_name, avatar_url)')
+          .single();
+
+      await _processMentions(commentText, eventId, userId);
+
+      return EventComment.fromJson(response);
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  Future<void> _processMentions(
+    String text,
+    String eventId,
+    String senderId,
+  ) async {
+    try {
+      final RegExp mentionRegex = RegExp(r'@(\w+)');
+      final Iterable<Match> matches = mentionRegex.allMatches(text);
+      if (matches.isEmpty) return;
+
+      final List<String> mentionedNames =
+          matches.map((m) => m.group(1)!).toList();
+
+      for (String name in mentionedNames) {
+        final profilesResponse = await _supabase
+            .from(AppTables.profiles)
+            .select('id')
+            .ilike('full_name', '%$name%')
+            .limit(1)
+            .maybeSingle();
+
+        if (profilesResponse != null) {
+          final targetUserId = profilesResponse['id'] as String;
+          if (targetUserId != senderId) {
+            await _supabase.from(AppTables.notifications).insert({
+              'user_id': targetUserId,
+              'message': 'Kamu telah ditandai dalam sebuah komentar.',
+              'event_id': eventId,
+            });
+          }
+        }
+      }
+    } catch (_) {
+      // Ignore errors for notifications
     }
   }
 
