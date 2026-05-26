@@ -4,7 +4,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'core/routes/app_routes.dart';
 import 'shared/theme/app_theme.dart';
-import 'shared/theme/theme_controller.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -18,31 +17,19 @@ Future<void> main() async {
   runApp(const EventifyApp());
 }
 
-class EventifyApp extends StatefulWidget {
+class EventifyApp extends StatelessWidget {
   const EventifyApp({super.key});
 
   @override
-  State<EventifyApp> createState() => _EventifyAppState();
-}
-
-class _EventifyAppState extends State<EventifyApp> {
-  final ThemeController _themeController = ThemeController.instance;
-
-  @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _themeController,
-      builder: (context, _) {
-        return MaterialApp(
-          title: 'Eventify Universitas Mulia',
-          theme: AppTheme.light(),
-          darkTheme: AppTheme.dark(),
-          themeMode: _themeController.mode,
-          debugShowCheckedModeBanner: false,
-          initialRoute: AppRoutes.splash,
-          onGenerateRoute: AppRoutes.generate,
-        );
-      },
+    return MaterialApp(
+      title: 'Eventify',
+      debugShowCheckedModeBanner: false,
+      theme: AppTheme.light(),
+      darkTheme: AppTheme.dark(),
+      themeMode: ThemeMode.light,
+      initialRoute: AppRoutes.splash,
+      onGenerateRoute: AppRoutes.generate,
     );
   }
 }

@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 import '../../../../core/models/user_profile.dart';
 import '../../../../core/routes/app_routes.dart';
+import '../../../../core/utils/nim_parser.dart';
 import '../../../../core/utils/spacing.dart';
 import '../../../../shared/theme/app_colors.dart';
-import '../../../../shared/theme/theme_controller.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -15,8 +16,8 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  final ThemeController _themeController = ThemeController.instance;
-  late final Future<UserProfile> _profileFuture;
+
+  late Future<UserProfile> _profileFuture;
 
   @override
   void initState() {
@@ -48,11 +49,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     final nama = (data['full_name'] as String?)?.trim();
     final nim = data['nim']?.toString();
-    final faculty = data['faculty']?.toString();
-    final programStudi = data['major']?.toString();
-    final angkatan = data['academic_year']?.toString();
+    String? faculty = data['faculty']?.toString();
+    String? programStudi = data['major']?.toString();
+    String? angkatan = data['academic_year']?.toString();
     final phoneNumber = data['phone_number']?.toString();
     final avatarUrl = data['avatar_url']?.toString();
+
+    // Auto-fill missing data if nim is available
+    if (nim != null && nim.isNotEmpty && (faculty == null || programStudi == null || angkatan == null)) {
+      final parser = NimParser(nim);
+      if (parser.isValid) {
+        faculty = parser.fakultas;
+        programStudi = parser.programStudi;
+        angkatan = parser.angkatan;
+        
+        // Attempt to update DB silently
+        try {
+          await Supabase.instance.client.from('profiles').update({
+            'faculty': faculty,
+            'major': programStudi,
+            'academic_year': angkatan,
+          }).eq('id', user.id);
+        } catch (_) {
+          // Ignore RLS or network errors during auto-fill
+        }
+      }
+    }
 
     return UserProfile(
       id: user.id,
@@ -104,106 +126,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
           return SingleChildScrollView(
             physics: const BouncingScrollPhysics(),
-            padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
+            padding: const EdgeInsets.only(bottom: AppSpacing.lg),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Profil Saya',
-                  style: textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.xl),
-
-                // Profile Header Card
-                Container(
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    gradient: AppColors.primaryGradient,
-                    borderRadius: BorderRadius.circular(28),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppColors.primary.withValues(alpha: 0.3),
-                        blurRadius: 20,
-                        offset: const Offset(0, 10),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: const BoxDecoration(
-                          color: Colors.white,
-                          shape: BoxShape.circle,
-                        ),
-                        child: CircleAvatar(
-                          radius: 36,
-                          backgroundColor: AppColors.divider,
-                          backgroundImage: profile.avatarUrl != null
-                              ? NetworkImage(profile.avatarUrl!)
-                              : null,
-                          child: profile.avatarUrl == null
-                              ? Icon(
-                                  Icons.person_rounded,
-                                  size: 40,
-                                  color: AppColors.primary,
-                                )
-                              : null,
-                        ),
-                      ),
-                      const SizedBox(width: 20),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              profile.fullName,
-                              style: textTheme.titleLarge?.copyWith(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              profile.email,
-                              style: textTheme.bodyMedium?.copyWith(
-                                color: Colors.white.withValues(alpha: 0.8),
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.2),
-                                borderRadius: BorderRadius.circular(100),
-                              ),
-                              child: const Text(
-                                'MAHASISWA AKTIF',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: 0.5,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
+                _buildPremiumHeader(context, textTheme, profile),
                 const SizedBox(height: AppSpacing.xl),
 
                 // Academic Information Section
-                _buildSectionLabel(context, 'Data Akademik'),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildSectionLabel(context, 'Data Akademik'),
                 const SizedBox(height: AppSpacing.md),
                 Container(
                   decoration: BoxDecoration(
@@ -268,68 +204,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                 const SizedBox(height: AppSpacing.xl),
 
-                // Theme Section
-                _buildSectionLabel(context, 'Tampilan'),
-                const SizedBox(height: AppSpacing.md),
-                AnimatedBuilder(
-                  animation: _themeController,
-                  builder: (context, _) {
-                    return Container(
-                      decoration: BoxDecoration(
-                        color: AppColors.surface,
-                        borderRadius: BorderRadius.circular(24),
-                        border: Border.all(color: AppColors.divider),
-                      ),
-                      child: Column(
-                        children: [
-                          RadioGroup<ThemeMode>(
-                            groupValue: _themeController.mode,
-                            onChanged: (mode) {
-                              if (mode != null) {
-                                _themeController.setMode(mode);
-                              }
-                            },
-                            child: Column(
-                              children: [
-                                RadioListTile<ThemeMode>(
-                                  value: ThemeMode.light,
-                                  activeColor: AppColors.primary,
-                                  title: Text(
-                                    'Tema Terang',
-                                    style: textTheme.titleSmall?.copyWith(
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                  secondary: Icon(
-                                    Icons.wb_sunny_rounded,
-                                    color: AppColors.accent,
-                                  ),
-                                ),
-                                const Divider(height: 0),
-                                RadioListTile<ThemeMode>(
-                                  value: ThemeMode.dark,
-                                  activeColor: AppColors.primary,
-                                  title: Text(
-                                    'Tema Gelap',
-                                    style: textTheme.titleSmall?.copyWith(
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                  secondary: Icon(
-                                    Icons.nightlight_round,
-                                    color: AppColors.primary,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
 
-                const SizedBox(height: AppSpacing.xl),
 
                 // Admin Section
                 _buildSectionLabel(context, 'Pengaturan Admin'),
@@ -420,10 +295,170 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ),
                 const SizedBox(height: AppSpacing.xl),
+                    ],
+                  ),
+                ),
               ],
             ),
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildPremiumHeader(BuildContext context, TextTheme textTheme, UserProfile profile) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.only(top: 60, left: 24, right: 24, bottom: 40),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color(0xFFEF4444), // Primary
+            Color(0xFFF59E0B), // Accent
+          ],
+        ),
+        borderRadius: const BorderRadius.only(
+          bottomLeft: Radius.circular(40),
+          bottomRight: Radius.circular(40),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withValues(alpha: 0.3),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Profil Saya',
+            style: textTheme.headlineSmall?.copyWith(
+              fontWeight: FontWeight.w800,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(height: 24),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(4),
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                ),
+                child: CircleAvatar(
+                  radius: 36,
+                  backgroundColor: AppColors.divider,
+                  backgroundImage: profile.avatarUrl != null
+                      ? CachedNetworkImageProvider(profile.avatarUrl!)
+                      : null,
+                  child: profile.avatarUrl == null
+                      ? Icon(
+                          Icons.person_rounded,
+                          size: 40,
+                          color: AppColors.primary,
+                        )
+                      : null,
+                ),
+              ),
+              const SizedBox(width: 20),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      profile.fullName,
+                      style: textTheme.titleLarge?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      profile.email,
+                      style: textTheme.bodyMedium?.copyWith(
+                        color: Colors.white.withValues(alpha: 0.8),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(100),
+                          ),
+                          child: const Text(
+                            'MAHASISWA AKTIF',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        InkWell(
+                          onTap: () async {
+                            final result = await Navigator.pushNamed(
+                              context,
+                              AppRoutes.editProfile,
+                              arguments: profile,
+                            );
+                            if (result == true && mounted) {
+                              setState(() {
+                                _profileFuture = _loadProfile();
+                              });
+                            }
+                          },
+                          borderRadius: BorderRadius.circular(100),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(100),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.edit_rounded,
+                                  size: 12,
+                                  color: AppColors.primary,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'EDIT PROFIL',
+                                  style: TextStyle(
+                                    color: AppColors.primary,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

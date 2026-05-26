@@ -63,37 +63,33 @@ class _CertificatesScreenState extends State<CertificatesScreen> {
 
           return SingleChildScrollView(
             physics: const BouncingScrollPhysics(),
-            padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
+            padding: const EdgeInsets.only(bottom: AppSpacing.lg),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Sertifikat Saya',
-                  style: textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.textPrimary,
+                _buildPremiumHeader(textTheme),
+                const SizedBox(height: AppSpacing.xl),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+                  child: Column(
+                    children: [
+                      if (certificates.isEmpty)
+                        _buildEmptyState(context)
+                      else
+                        ListView.separated(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemBuilder: (context, index) {
+                            final cert = certificates[index];
+                            return _CertificateCard(cert: cert);
+                          },
+                          separatorBuilder: (_, __) => const SizedBox(height: 16),
+                          itemCount: certificates.length,
+                        ),
+                      const SizedBox(height: AppSpacing.xl),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  'Unduh sertifikat sebagai bukti partisipasi event.',
-                  style: textTheme.bodyLarge,
-                ),
-                const SizedBox(height: AppSpacing.xl),
-                if (certificates.isEmpty)
-                  _buildEmptyState(context)
-                else
-                  ListView.separated(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemBuilder: (context, index) {
-                      final cert = certificates[index];
-                      return _CertificateCard(cert: cert);
-                    },
-                    separatorBuilder: (_, __) => const SizedBox(height: 16),
-                    itemCount: certificates.length,
-                  ),
-                const SizedBox(height: AppSpacing.xl),
               ],
             ),
           );
@@ -102,30 +98,100 @@ class _CertificatesScreenState extends State<CertificatesScreen> {
     );
   }
 
+  Widget _buildPremiumHeader(TextTheme textTheme) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.only(top: 60, left: 24, right: 24, bottom: 40),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color(0xFFEF4444), // Primary
+            Color(0xFFF59E0B), // Accent
+          ],
+        ),
+        borderRadius: const BorderRadius.only(
+          bottomLeft: Radius.circular(40),
+          bottomRight: Radius.circular(40),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withValues(alpha: 0.3),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Sertifikat Saya',
+                style: textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  color: Colors.white,
+                ),
+              ),
+              const CircleAvatar(
+                backgroundColor: Colors.white24,
+                child: Icon(Icons.workspace_premium_rounded, color: Colors.white),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Koleksi sertifikat apresiasi atas partisipasimu di event kampus.',
+            style: textTheme.bodyMedium?.copyWith(
+              color: Colors.white.withValues(alpha: 0.9),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildEmptyState(BuildContext context) {
     return Center(
       child: Column(
         children: [
-          const SizedBox(height: 60),
+          const SizedBox(height: 40),
           Container(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.all(32),
             decoration: BoxDecoration(
-              color: AppColors.primary.withValues(alpha: 0.05),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  AppColors.primary.withValues(alpha: 0.05),
+                  AppColors.primary.withValues(alpha: 0.15),
+                ],
+              ),
               shape: BoxShape.circle,
             ),
             child: Icon(
-              Icons.workspace_premium_outlined,
-              size: 64,
-              color: AppColors.divider,
+              Icons.workspace_premium_rounded,
+              size: 80,
+              color: AppColors.primary.withValues(alpha: 0.5),
             ),
           ),
-          const SizedBox(height: 24),
-          const Text(
+          const SizedBox(height: 32),
+          Text(
             'Belum ada sertifikat',
-            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.w800,
+            ),
           ),
           const SizedBox(height: 8),
-          const Text('Selesaikan event untuk mendapatkan sertifikat.'),
+          const Text(
+            'Selesaikan event untuk mendapatkan sertifikat\ndan bangun portofoliomu!',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.black54),
+          ),
+          const SizedBox(height: 40),
         ],
       ),
     );

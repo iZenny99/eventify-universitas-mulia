@@ -60,6 +60,12 @@ class AppTheme {
         bodyLarge: GoogleFonts.plusJakartaSans(color: palette.textPrimary),
         bodyMedium: GoogleFonts.plusJakartaSans(color: palette.textSecondary),
       ),
+      pageTransitionsTheme: const PageTransitionsTheme(
+        builders: {
+          TargetPlatform.android: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+        },
+      ),
       appBarTheme: AppBarTheme(
         elevation: 0,
         backgroundColor: Colors.transparent,

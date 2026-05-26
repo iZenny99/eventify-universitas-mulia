@@ -383,11 +383,10 @@ class _EventFormScreenState extends State<EventFormScreen> {
           final f = _customFields[i];
           fieldsPayload.add({
             'event_id': eventId,
-            'label': f['label'],
+            'field_name': f['label'],
             'field_type': f['field_type'],
             'is_required': f['is_required'],
             'options': f['options'],
-            'sort_order': i,
           });
         }
         await supabase.from('event_form_fields').insert(fieldsPayload);

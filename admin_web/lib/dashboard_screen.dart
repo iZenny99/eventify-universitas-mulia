@@ -2,6 +2,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'category_management_view.dart';
 import 'event_form_screen.dart';
 import 'main.dart';
 import 'theme.dart';
@@ -85,7 +86,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             const SizedBox(height: 28),
             _buildNavItem(0, Icons.dashboard_rounded, 'Overview'),
             _buildNavItem(1, Icons.event_rounded, 'Kelola Event'),
-            _buildNavItem(2, Icons.people_rounded, 'Pengguna'),
+            _buildNavItem(2, Icons.category_rounded, 'Kelola Kategori'),
+            _buildNavItem(3, Icons.people_rounded, 'Pengguna'),
             const SizedBox(height: 24),
             const Divider(color: AppTheme.divider),
             const SizedBox(height: 12),
@@ -139,6 +141,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 onCreateEvent: () => setState(() => _isCreatingEvent = true),
               );
       case 2:
+        return const CategoryManagementView();
+      case 3:
         return const UserManagementView();
       default:
         return const SizedBox.shrink();
@@ -154,84 +158,59 @@ class OverviewView extends StatefulWidget {
 }
 
 class _OverviewViewState extends State<OverviewView> {
-  late Future<_OverviewData> _overviewFuture;
+  late Stream<_OverviewData> _overviewStream;
 
   @override
   void initState() {
     super.initState();
-    _overviewFuture = _loadOverview();
+    _overviewStream = _buildOverviewStream();
   }
 
-  Future<_OverviewData> _loadOverview() async {
-    final events = await adminClient
-        .from('events')
-        .select('id')
-        .eq('status', 'published');
-    final users = await adminClient.from('profiles').select('id');
-    final registrations = await adminClient
-        .from('event_registrations')
-        .select('id')
-        .neq('status', 'cancelled');
-
-    final latestRegs = await adminClient
-        .from('event_registrations')
-        .select('status, registered_at, profiles(full_name), events(title)')
-        .neq('status', 'cancelled')
-        .order('registered_at', ascending: false)
-        .limit(10);
-
-    final latestRegistrations = (latestRegs as List)
-        .map((item) => Map<String, dynamic>.from(item as Map))
-        .toList();
-
-    final attendanceRows = await adminClient
-        .from('event_registrations')
-        .select('attended_at')
-        .not('attended_at', 'is', null);
-
-    final now = DateTime.now();
-    final startDay = DateTime(
-      now.year,
-      now.month,
-      now.day,
-    ).subtract(const Duration(days: 6));
-    final Map<String, int> counts = {};
-    final List<String> labels = [];
-    for (int i = 0; i < 7; i++) {
-      final day = startDay.add(Duration(days: i));
-      final key =
-          '${day.year}-${day.month.toString().padLeft(2, '0')}-${day.day.toString().padLeft(2, '0')}';
-      counts[key] = 0;
-      labels.add('${day.day}/${day.month}');
-    }
-
-    for (final row in (attendanceRows as List)) {
-      final raw = row['attended_at']?.toString();
-      if (raw == null) continue;
-      final parsed = DateTime.tryParse(raw);
-      if (parsed == null) continue;
-      final dayKey =
-          '${parsed.year}-${parsed.month.toString().padLeft(2, '0')}-${parsed.day.toString().padLeft(2, '0')}';
-      if (counts.containsKey(dayKey)) {
-        counts[dayKey] = (counts[dayKey] ?? 0) + 1;
+  Stream<_OverviewData> _buildOverviewStream() async* {
+    // Listen to users stream
+    final usersStream = adminClient.from('profiles').stream(primaryKey: ['id']);
+    // Since combining streams in Dart without RxDart is tricky, we can just yield whenever profiles or events change.
+    // To make it simple but effective, we use a timer-based poll or a simpler stream.
+    // For true realtime without rxdart, we listen to events and profiles separately and update a local state,
+    // OR we yield periodically, OR we just use a unified stream. 
+    // Since Supabase returns Stream, we can just map the profiles stream and inside it fetch events and registrations.
+    await for (final users in usersStream) {
+      final events = await adminClient.from('events').select('id').eq('status', 'published');
+      final registrations = await adminClient.from('event_registrations').select('id').neq('status', 'cancelled');
+      
+      final Map<String, int> counts = {};
+      final List<String> labels = [];
+      final now = DateTime.now();
+      final startDay = DateTime(now.year, now.month, now.day).subtract(const Duration(days: 6));
+      for (int i = 0; i < 7; i++) {
+        final day = startDay.add(Duration(days: i));
+        final key = '${day.year}-${day.month.toString().padLeft(2, '0')}-${day.day.toString().padLeft(2, '0')}';
+        counts[key] = 0;
+        labels.add('${day.day}/${day.month}');
       }
+
+      for (final row in users) {
+        final raw = row['created_at']?.toString();
+        if (raw == null) continue;
+        final parsed = DateTime.tryParse(raw);
+        if (parsed == null) continue;
+        final dayKey = '${parsed.year}-${parsed.month.toString().padLeft(2, '0')}-${parsed.day.toString().padLeft(2, '0')}';
+        if (counts.containsKey(dayKey)) {
+          counts[dayKey] = (counts[dayKey] ?? 0) + 1;
+        }
+      }
+
+      final attendanceSeries = counts.values.toList().asMap().entries.map((entry) => FlSpot(entry.key.toDouble(), entry.value.toDouble())).toList();
+
+      yield _OverviewData(
+        totalEvents: (events as List).length,
+        totalUsers: users.length,
+        totalRegistrations: (registrations as List).length,
+        latestRegistrations: const [],
+        attendanceSeries: attendanceSeries,
+        attendanceLabels: labels,
+      );
     }
-
-    final attendanceSeries = counts.values
-        .toList()
-        .asMap()
-        .entries
-        .map((entry) => FlSpot(entry.key.toDouble(), entry.value.toDouble()))
-        .toList();
-
-    return _OverviewData(
-      totalEvents: (events as List).length,
-      totalUsers: (users as List).length,
-      totalRegistrations: (registrations as List).length,
-      latestRegistrations: latestRegistrations,
-      attendanceSeries: attendanceSeries,
-      attendanceLabels: labels,
-    );
   }
 
   @override
@@ -242,10 +221,10 @@ class _OverviewViewState extends State<OverviewView> {
 
     return Padding(
       padding: EdgeInsets.all(horizontalPadding),
-      child: FutureBuilder<_OverviewData>(
-        future: _overviewFuture,
+      child: StreamBuilder<_OverviewData>(
+        stream: _overviewStream,
         builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
+          if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
 
@@ -310,38 +289,6 @@ class _OverviewViewState extends State<OverviewView> {
               ),
               const SizedBox(height: 32),
               _buildAttendanceChart(data),
-              const SizedBox(height: 32),
-              const Text(
-                'Pendaftaran Terbaru',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 16),
-              Expanded(
-                child: Container(
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    color: AppTheme.surface,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: AppTheme.divider),
-                  ),
-                  child: ListView.separated(
-                    itemCount: data.latestRegistrations.length,
-                    separatorBuilder: (_, __) => const Divider(height: 0),
-                    itemBuilder: (context, index) {
-                      final reg = data.latestRegistrations[index];
-                      final profile = reg['profiles'] as Map<String, dynamic>?;
-                      final event = reg['events'] as Map<String, dynamic>?;
-                      return ListTile(
-                        title: Text(profile?['full_name']?.toString() ?? '-'),
-                        subtitle: Text(event?['title']?.toString() ?? '-'),
-                        trailing: Text(
-                          reg['status']?.toString().toUpperCase() ?? '- ',
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ),
             ],
           );
         },
@@ -376,7 +323,7 @@ class _OverviewViewState extends State<OverviewView> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Kehadiran 7 Hari Terakhir',
+            'Pertumbuhan Pengguna 7 Hari Terakhir',
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 16),
@@ -501,20 +448,53 @@ class _EventManagementViewState extends State<EventManagementView> {
   }
 
   Future<void> _deleteEvent(String eventId) async {
-    final regs = await adminClient
-        .from('event_registrations')
-        .select('id')
-        .eq('event_id', eventId);
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Hapus Event?'),
+        content: const Text('Tindakan ini akan menghapus event secara permanen beserta seluruh data pendaftar dan komentar!'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Batal')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Hapus Paksa', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
 
-    if ((regs as List).isNotEmpty) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Event sudah memiliki pendaftar.')),
-      );
-      return;
+    if (confirm != true) return;
+
+    try {
+      final regs = await adminClient.from('event_registrations').select('id').eq('event_id', eventId);
+      final regIds = (regs as List).map((e) => e['id']).toList();
+      
+      if (regIds.isNotEmpty) {
+        for (var rid in regIds) {
+          await adminClient.from('registration_form_answers').delete().eq('registration_id', rid);
+          await adminClient.from('certificates').delete().eq('registration_id', rid);
+        }
+        for (var rid in regIds) {
+          await adminClient.from('event_registrations').delete().eq('id', rid);
+        }
+      }
+      
+      await adminClient.from('certificates').delete().eq('event_id', eventId);
+      await adminClient.from('event_bookmarks').delete().eq('event_id', eventId);
+      await adminClient.from('event_form_fields').delete().eq('event_id', eventId);
+      await adminClient.from('event_comments').delete().eq('event_id', eventId);
+      await adminClient.from('notifications').delete().eq('event_id', eventId);
+      await adminClient.from('events').delete().eq('id', eventId);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Event berhasil dihapus bersih.')));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error menghapus event: $e')));
+      }
     }
-
-    await adminClient.from('events').delete().eq('id', eventId);
   }
 
   Future<List<Map<String, dynamic>>> _loadRegistrations(String eventId) async {
@@ -743,7 +723,7 @@ class _EventManagementViewState extends State<EventManagementView> {
                 }
 
                 return DefaultTabController(
-                  length: 2,
+                  length: 3,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -793,6 +773,7 @@ class _EventManagementViewState extends State<EventManagementView> {
                           labelColor: AppTheme.primary,
                           unselectedLabelColor: AppTheme.textSecondary,
                           tabs: [
+                            Tab(text: 'Statistik'),
                             Tab(text: 'Pendaftar'),
                             Tab(text: 'Komentar'),
                           ],
@@ -801,6 +782,7 @@ class _EventManagementViewState extends State<EventManagementView> {
                       Expanded(
                         child: TabBarView(
                           children: [
+                            _buildStatsTab(future: registrationsFuture),
                             _buildRegistrationsTab(
                               future: registrationsFuture,
                               onRefresh: refreshRegistrations,
@@ -820,6 +802,114 @@ class _EventManagementViewState extends State<EventManagementView> {
           ),
         );
       },
+    );
+  }
+
+  Widget _buildStatsTab({required Future<List<Map<String, dynamic>>> future}) {
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: FutureBuilder<List<Map<String, dynamic>>>(
+        future: future,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          final regs = snapshot.data ?? [];
+          
+          final Map<String, int> counts = {};
+          final List<String> labels = [];
+          
+          final now = DateTime.now();
+          final startDay = DateTime(now.year, now.month, now.day).subtract(const Duration(days: 6));
+          for (int i = 0; i < 7; i++) {
+            final day = startDay.add(Duration(days: i));
+            final key = '${day.year}-${day.month.toString().padLeft(2, '0')}-${day.day.toString().padLeft(2, '0')}';
+            counts[key] = 0;
+            labels.add('${day.day}/${day.month}');
+          }
+
+          if (regs.isNotEmpty) {
+            for (final reg in regs) {
+              final raw = reg['registered_at']?.toString();
+              if (raw == null) continue;
+              final parsed = DateTime.tryParse(raw);
+              if (parsed == null) continue;
+              final dayKey = '${parsed.year}-${parsed.month.toString().padLeft(2, '0')}-${parsed.day.toString().padLeft(2, '0')}';
+              if (counts.containsKey(dayKey)) {
+                counts[dayKey] = (counts[dayKey] ?? 0) + 1;
+              }
+            }
+          }
+          
+          final series = counts.values.toList().asMap().entries.map((e) => FlSpot(e.key.toDouble(), e.value.toDouble())).toList();
+          
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildMetricCard(label: 'Total Pendaftar', value: regs.length.toString()),
+              const SizedBox(height: 32),
+              const Text('Pertumbuhan Pendaftar 7 Hari Terakhir', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              const SizedBox(height: 16),
+              Expanded(
+                child: series.isEmpty || counts.values.every((v) => v == 0)
+                    ? const Center(child: Text('Belum ada data pendaftar minggu ini.'))
+                    : Container(
+                        padding: const EdgeInsets.only(right: 24, top: 24),
+                        decoration: BoxDecoration(
+                          color: AppTheme.surface,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: AppTheme.divider),
+                        ),
+                        child: LineChart(
+                          LineChartData(
+                            gridData: FlGridData(show: true, drawVerticalLine: false),
+                            borderData: FlBorderData(show: false),
+                            titlesData: FlTitlesData(
+                              leftTitles: AxisTitles(
+                                sideTitles: SideTitles(
+                                  showTitles: true,
+                                  reservedSize: 32,
+                                  getTitlesWidget: (value, meta) {
+                                    if (value % 1 != 0) return const SizedBox.shrink();
+                                    return Text(value.toInt().toString(), style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11));
+                                  },
+                                ),
+                              ),
+                              bottomTitles: AxisTitles(
+                                sideTitles: SideTitles(
+                                  showTitles: true,
+                                  interval: 1,
+                                  getTitlesWidget: (value, meta) {
+                                    final index = value.toInt();
+                                    if (index < 0 || index >= labels.length) return const SizedBox.shrink();
+                                    return Padding(
+                                      padding: const EdgeInsets.only(top: 8),
+                                      child: Text(labels[index], style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
+                                    );
+                                  },
+                                ),
+                              ),
+                              rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                              topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                            ),
+                            lineBarsData: [
+                              LineChartBarData(
+                                spots: series,
+                                isCurved: true,
+                                barWidth: 3,
+                                color: AppTheme.primary,
+                                belowBarData: BarAreaData(show: true, color: AppTheme.primary.withValues(alpha: 0.12)),
+                                dotData: FlDotData(show: true),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+              ),
+            ],
+          );
+        }
+      ),
     );
   }
 

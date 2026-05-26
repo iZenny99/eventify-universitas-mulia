@@ -1,12 +1,17 @@
 import 'package:cached_network_image/cached_network_image.dart';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:uuid/uuid.dart';
+import 'package:share_plus/share_plus.dart';
 
+import '../../../../core/routes/app_routes.dart';
 import '../../../../core/utils/date_formatter.dart';
 import '../../../../shared/theme/app_colors.dart';
 import '../../../../shared/widgets/primary_button.dart';
 import '../../data/comment_repository.dart';
+import '../../data/mention_service.dart';
 import '../../domain/event_comment.dart';
 import '../../domain/event_model.dart';
 
@@ -28,13 +33,22 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
   bool _isLoadingAction = false;
   bool _isLoadingComments = false;
   bool _isSubmittingComment = false;
-  bool _canComment = false;
+
+  // Mentions
+  final _mentionService = MentionService();
+  List<MentionUser> _mentionSuggestions = [];
+  bool _isMentioning = false;
+  String _mentionQuery = '';
+  Timer? _debounceTimer;
+  final List<String> _mentionedUserIds = [];
+
   List<EventComment> _comments = [];
   EventComment? _editingComment;
 
   @override
   void initState() {
     super.initState();
+    _commentController.addListener(_onCommentChanged);
     _loadRegistrationState();
     _loadConfirmedCount();
     _loadComments();
@@ -43,8 +57,74 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
 
   @override
   void dispose() {
+    _debounceTimer?.cancel();
+    _commentController.removeListener(_onCommentChanged);
     _commentController.dispose();
     super.dispose();
+  }
+
+  void _onCommentChanged() {
+    final text = _commentController.text;
+    final cursorPosition = _commentController.selection.baseOffset;
+    if (cursorPosition == -1) return;
+
+    final textBeforeCursor = text.substring(0, cursorPosition);
+    final lastAtSymbol = textBeforeCursor.lastIndexOf('@');
+
+    if (lastAtSymbol != -1) {
+      final textAfterAt = textBeforeCursor.substring(lastAtSymbol + 1);
+      if (!textAfterAt.contains(' ')) {
+        setState(() {
+          _isMentioning = true;
+          _mentionQuery = textAfterAt;
+        });
+        _searchMentions(_mentionQuery);
+        return;
+      }
+    }
+
+    if (_isMentioning) {
+      setState(() {
+        _isMentioning = false;
+        _mentionSuggestions.clear();
+      });
+    }
+  }
+
+  void _searchMentions(String query) {
+    if (_debounceTimer?.isActive ?? false) _debounceTimer!.cancel();
+    _debounceTimer = Timer(const Duration(milliseconds: 300), () async {
+      final results = await _mentionService.searchUsers(query);
+      if (mounted) {
+        setState(() {
+          _mentionSuggestions = results;
+        });
+      }
+    });
+  }
+
+  void _selectMention(MentionUser user) {
+    final text = _commentController.text;
+    final cursorPosition = _commentController.selection.baseOffset;
+    
+    final textBeforeCursor = text.substring(0, cursorPosition);
+    final textAfterCursor = text.substring(cursorPosition);
+    
+    final lastAtSymbol = textBeforeCursor.lastIndexOf('@');
+    final textBeforeAt = textBeforeCursor.substring(0, lastAtSymbol);
+    
+    final replacement = '@${user.name} ';
+    _commentController.text = textBeforeAt + replacement + textAfterCursor;
+    _commentController.selection = TextSelection.collapsed(offset: textBeforeAt.length + replacement.length);
+    
+    if (!_mentionedUserIds.contains(user.id)) {
+      _mentionedUserIds.add(user.id);
+    }
+
+    setState(() {
+      _isMentioning = false;
+      _mentionSuggestions.clear();
+    });
   }
 
   Future<void> _loadRegistrationState() async {
@@ -100,23 +180,6 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
     final eventId = widget.event?.id;
     if (eventId == null) return;
 
-    final user = _supabase.auth.currentUser;
-    if (user == null) {
-      if (mounted) setState(() => _canComment = false);
-      return;
-    }
-
-    try {
-      final canComment = await _commentRepository.canUserComment(
-        eventId: eventId,
-        userId: user.id,
-      );
-      if (!mounted) return;
-      setState(() => _canComment = canComment);
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _canComment = false);
-    }
   }
 
   bool get _isLoggedIn => _supabase.auth.currentUser != null;
@@ -196,6 +259,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
     final user = _supabase.auth.currentUser;
     if (user == null) return;
 
+    final qrCode = const Uuid().v4();
     Map<String, dynamic> registration;
     if (_registration == null) {
       registration = await _supabase
@@ -204,13 +268,17 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
             'event_id': data.id,
             'user_id': user.id,
             'status': 'confirmed',
+            'qr_code': qrCode,
           })
           .select()
           .single();
     } else {
       registration = await _supabase
           .from('event_registrations')
-          .update({'status': 'confirmed'})
+          .update({
+            'status': 'confirmed',
+            'qr_code': qrCode,
+          })
           .eq('id', _registration!['id'])
           .select()
           .single();
@@ -641,15 +709,18 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
           userId: user.id,
           commentText: text,
           eventId: eventId,
+          mentionedUserIds: _mentionedUserIds,
         );
       } else {
         await _commentRepository.addComment(
           eventId: eventId,
           userId: user.id,
           commentText: text,
+          mentionedUserIds: _mentionedUserIds,
         );
       }
       _commentController.clear();
+      _mentionedUserIds.clear();
       _editingComment = null;
       await _loadComments();
     } on PostgrestException catch (e) {
@@ -738,6 +809,9 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
     String buttonLabel;
     VoidCallback? buttonAction;
 
+    final currentUser = _supabase.auth.currentUser;
+    final isAdmin = currentUser != null && data.organizerId == currentUser.id;
+
     if (!_isLoggedIn) {
       buttonLabel = 'Login untuk Daftar';
       buttonAction = null;
@@ -787,7 +861,13 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
             child: CircleAvatar(
               backgroundColor: AppColors.surface,
               child: IconButton(
-                onPressed: () {},
+                onPressed: () {
+                  // ignore: deprecated_member_use
+                  Share.share(
+                    '🎓 Ikuti ${data.categoryName ?? "Event"}: ${data.title}\n📍 ${data.locationName}\n📅 ${DateFormatter.formatShort(data.startDate)}\n\n${data.shortDescription ?? ""}\n\nDaftar sekarang:\nhttps://eventify.app/event/${data.id}',
+                    subject: 'Event Eventify: ${data.title}',
+                  );
+                },
                 icon: Icon(
                   Icons.share_outlined,
                   size: 20,
@@ -987,11 +1067,95 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
               ),
             ],
           ),
-          child: PrimaryButton(
-            label: buttonLabel,
-            onPressed: _isLoadingAction ? null : buttonAction,
-            isLoading: _isLoadingAction,
-          ),
+          child: isAdmin
+              ? Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () {
+                          Navigator.pushNamed(
+                            context,
+                            AppRoutes.attendanceDashboard,
+                            arguments: {
+                              'eventId': data.id,
+                              'eventName': data.title,
+                            },
+                          );
+                        },
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.primary,
+                          side: BorderSide(color: AppColors.primary),
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                        ),
+                        child: const Text('Dashboard', maxLines: 1, overflow: TextOverflow.ellipsis),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      flex: 1,
+                      child: PrimaryButton(
+                        label: 'Scan QR',
+                        onPressed: () {
+                          Navigator.pushNamed(context, AppRoutes.attendanceScanner);
+                        },
+                      ),
+                    ),
+                  ],
+                )
+              : _isRegistered
+                  ? Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: _isLoadingAction ? null : _handleCancel,
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppColors.error,
+                              side: BorderSide(color: AppColors.error),
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                            ),
+                            child: const Text('Batal'),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          flex: 2,
+                          child: PrimaryButton(
+                            label: 'Tampilkan QR',
+                            onPressed: _isLoadingAction
+                                ? null
+                                : () {
+                                    final qrToken = _registration?['qr_code'] as String? ?? _registration?['id'] as String?;
+                                    if (qrToken == null || qrToken.isEmpty) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(content: Text('Data pendaftaran tidak valid.')),
+                                      );
+                                      return;
+                                    }
+                                    Navigator.pushNamed(
+                                      context,
+                                      AppRoutes.myQr,
+                                      arguments: {
+                                        'eventName': data.title,
+                                        'qrToken': qrToken,
+                                      },
+                                    );
+                                  },
+                            isLoading: _isLoadingAction,
+                          ),
+                        ),
+                      ],
+                    )
+                  : PrimaryButton(
+                      label: buttonLabel,
+                      onPressed: _isLoadingAction ? null : buttonAction,
+                      isLoading: _isLoadingAction,
+                    ),
         ),
       ),
     );
@@ -1094,8 +1258,6 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
         const SizedBox(height: 16),
         if (!_isLoggedIn)
           _buildCommentHint('Login untuk memberikan komentar.')
-        else if (!_canComment)
-          _buildCommentHint('Hanya peserta yang bisa memberikan komentar.')
         else
           _buildCommentForm(),
       ],
@@ -1259,6 +1421,41 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (_isMentioning && _mentionSuggestions.isNotEmpty)
+          Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.divider),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.05),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            constraints: const BoxConstraints(maxHeight: 200),
+            child: ListView.separated(
+              shrinkWrap: true,
+              itemCount: _mentionSuggestions.length,
+              separatorBuilder: (_, __) => const Divider(height: 1),
+              itemBuilder: (context, index) {
+                final user = _mentionSuggestions[index];
+                return ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: AppColors.primary.withValues(alpha: 0.1),
+                    backgroundImage: user.avatarUrl != null ? NetworkImage(user.avatarUrl!) : null,
+                    child: user.avatarUrl == null ? const Icon(Icons.person, size: 20) : null,
+                  ),
+                  title: Text(user.name, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                  subtitle: Text('${user.nim} • ${user.major}', style: const TextStyle(fontSize: 12)),
+                  onTap: () => _selectMention(user),
+                );
+              },
+            ),
+          ),
         TextField(
           controller: _commentController,
           maxLines: 3,

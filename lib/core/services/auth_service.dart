@@ -11,14 +11,15 @@ class AuthService {
     required String password,
     required String namaLengkap,
     required String nim,
+    required String fakultas,
     required String programStudi,
     required int angkatan,
   }) async {
     try {
-      if (!email.endsWith('@students.universitasmulia.ac.id')) {
+      if (!email.endsWith('@student.universitasmulia.ac.id')) {
         return {
           'success': false,
-          'message': 'Gunakan email kampus (@students.universitasmulia.ac.id)',
+          'message': 'Gunakan email kampus (@student.universitasmulia.ac.id)',
         };
       }
 
@@ -40,16 +41,38 @@ class AuthService {
         await _client.auth.signInWithPassword(email: email, password: password);
       }
 
-      await _client
+      // Check if profile exists
+      final profileExists = await _client
+          .from('profiles')
+          .select('id')
+          .eq('id', user.id)
+          .maybeSingle();
+
+      if (profileExists != null) {
+         await _client
           .from('profiles')
           .update({
+            'full_name': namaLengkap,
             'nim': nim,
+            'faculty': fakultas,
             'major': programStudi,
             'academic_year': angkatan.toString(),
+            'email': email,
           })
-          .eq('id', user.id)
-          .select()
-          .single();
+          .eq('id', user.id);
+      } else {
+         await _client
+          .from('profiles')
+          .insert({
+            'id': user.id,
+            'full_name': namaLengkap,
+            'nim': nim,
+            'faculty': fakultas,
+            'major': programStudi,
+            'academic_year': angkatan.toString(),
+            'email': email,
+          });
+      }
 
       return {
         'success': true,
@@ -117,5 +140,47 @@ class AuthService {
         'message': 'Terjadi kesalahan. Silakan coba lagi.',
       };
     }
+  }
+
+  Future<Map<String, dynamic>> verifyResetOTP({
+    required String email,
+    required String token,
+  }) async {
+    try {
+      final response = await _client.auth.verifyOTP(
+        email: email,
+        token: token,
+        type: OtpType.recovery,
+      );
+
+      if (response.session == null) {
+        return {'success': false, 'message': 'Kode OTP tidak valid atau kadaluarsa.'};
+      }
+
+      return {'success': true, 'message': 'Kode terverifikasi.'};
+    } on AuthException catch (e) {
+      return {'success': false, 'message': e.message};
+    } catch (e) {
+      return {'success': false, 'message': 'Terjadi kesalahan sistem.'};
+    }
+  }
+
+  Future<Map<String, dynamic>> updatePassword({
+    required String newPassword,
+  }) async {
+    try {
+      await _client.auth.updateUser(
+        UserAttributes(password: newPassword),
+      );
+      return {'success': true, 'message': 'Password berhasil diubah.'};
+    } on AuthException catch (e) {
+      return {'success': false, 'message': e.message};
+    } catch (e) {
+      return {'success': false, 'message': 'Terjadi kesalahan sistem.'};
+    }
+  }
+
+  Future<void> signOut() async {
+    await _client.auth.signOut();
   }
 }

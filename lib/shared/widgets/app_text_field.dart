@@ -10,6 +10,7 @@ class AppTextField extends StatefulWidget {
     this.obscureText = false,
     this.keyboardType,
     this.controller,
+    this.readOnly = false,
   });
 
   final String label;
@@ -18,6 +19,7 @@ class AppTextField extends StatefulWidget {
   final bool obscureText;
   final TextInputType? keyboardType;
   final TextEditingController? controller;
+  final bool readOnly;
 
   @override
   State<AppTextField> createState() => _AppTextFieldState();
@@ -54,9 +56,14 @@ class _AppTextFieldState extends State<AppTextField> {
           ),
           child: TextFormField(
             controller: widget.controller,
+            readOnly: widget.readOnly,
             obscureText: isPassword && !_isPasswordVisible,
             keyboardType: widget.keyboardType,
-            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: widget.readOnly ? AppColors.textSecondary : AppColors.textPrimary,
+            ),
             decoration: InputDecoration(
               hintText: widget.hint,
               prefixIcon: widget.icon != null

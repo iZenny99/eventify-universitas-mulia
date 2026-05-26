@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
-import '../core/routes/app_routes.dart';
-import '../core/services/auth_service.dart';
-import '../core/utils/spacing.dart';
-import '../shared/theme/app_colors.dart';
-import '../shared/widgets/app_scaffold.dart';
-import '../shared/widgets/app_text_field.dart';
-import '../shared/widgets/primary_button.dart';
+import '../../../../core/routes/app_routes.dart';
+import '../../../../core/services/auth_service.dart';
+import '../../../../core/utils/spacing.dart';
+import '../../../../shared/theme/app_colors.dart';
+import '../../../../shared/widgets/app_scaffold.dart';
+import '../../../../shared/widgets/app_text_field.dart';
+import '../../../../shared/widgets/primary_button.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
@@ -71,7 +71,11 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     );
 
     if (success) {
-      Navigator.pushReplacementNamed(context, AppRoutes.login);
+      Navigator.pushNamed(
+        context,
+        AppRoutes.verifyResetCode,
+        arguments: {'email': email},
+      );
     }
   }
 
@@ -85,7 +89,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: AppSpacing.xl),
-            // Header Image/Illustration Placeholder
             Container(
               height: 200,
               width: double.infinity,

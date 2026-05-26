@@ -32,29 +32,29 @@ class AppColorPalette {
   final Color info;
 
   static const AppColorPalette light = AppColorPalette(
-    primary: Color(0xFFEF4444),
-    primaryDark: Color(0xFFF97316),
-    accent: Color(0xFFF59E0B),
-    background: Color(0xFFFFFBF5),
-    surface: Color(0xFFFFFFFF),
-    textPrimary: Color(0xFF1F2937),
-    textSecondary: Color(0xFF6B7280),
-    divider: Color(0xFFF3E8E0),
-    success: Color(0xFF10B981),
-    error: Color(0xFFEF4444),
-    warning: Color(0xFFF59E0B),
-    info: Color(0xFF3B82F6),
+    primary: Color(0xFFEF4444), // Red 500
+    primaryDark: Color(0xFFF97316), // Orange 500
+    accent: Color(0xFFF59E0B), // Amber 500
+    background: Color(0xFFF8FAFC), // Slate 50
+    surface: Color(0xFFFFFFFF), // White
+    textPrimary: Color(0xFF0F172A), // Slate 900
+    textSecondary: Color(0xFF64748B), // Slate 500
+    divider: Color(0xFFE2E8F0), // Slate 200
+    success: Color(0xFF10B981), // Emerald 500
+    error: Color(0xFFEF4444), // Red 500
+    warning: Color(0xFFF59E0B), // Amber 500
+    info: Color(0xFF3B82F6), // Blue 500
   );
 
   static const AppColorPalette dark = AppColorPalette(
-    primary: Color(0xFFFB7185),
-    primaryDark: Color(0xFFF97316),
-    accent: Color(0xFFF59E0B),
-    background: Color(0xFF0B0B10),
-    surface: Color(0xFF15151B),
-    textPrimary: Color(0xFFF9FAFB),
-    textSecondary: Color(0xFF9CA3AF),
-    divider: Color(0xFF23232D),
+    primary: Color(0xFFFB7185), // Light Red
+    primaryDark: Color(0xFFF97316), // Orange
+    accent: Color(0xFFF59E0B), // Amber
+    background: Color(0xFF0F172A), // Slate 900
+    surface: Color(0xFF1E293B), // Slate 800
+    textPrimary: Color(0xFFF8FAFC), // Slate 50
+    textSecondary: Color(0xFF94A3B8), // Slate 400
+    divider: Color(0xFF334155), // Slate 700
     success: Color(0xFF34D399),
     error: Color(0xFFF87171),
     warning: Color(0xFFFBBF24),

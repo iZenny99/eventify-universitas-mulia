@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'main.dart';
 import 'theme.dart';
+import 'utils/nim_parser.dart';
 
 class UserManagementView extends StatefulWidget {
   const UserManagementView({super.key});
@@ -22,16 +23,30 @@ class _UserManagementViewState extends State<UserManagementView> {
   final _academicYearCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
 
-  late Future<List<Map<String, dynamic>>> _usersFuture;
+  late Stream<List<Map<String, dynamic>>> _usersStream;
 
   @override
   void initState() {
     super.initState();
-    _usersFuture = _loadUsers();
+    _usersStream = _buildUsersStream();
+    _nimCtrl.addListener(_onNimChanged);
+  }
+
+  void _onNimChanged() {
+    final nim = _nimCtrl.text.trim();
+    if (nim.length >= 7) {
+      final parser = NimParser(nim);
+      if (parser.isValid) {
+        _facultyCtrl.text = parser.fakultas;
+        _majorCtrl.text = parser.programStudi;
+        _academicYearCtrl.text = parser.angkatan;
+      }
+    }
   }
 
   @override
   void dispose() {
+    _nimCtrl.removeListener(_onNimChanged);
     _emailCtrl.dispose();
     _passwordCtrl.dispose();
     _nameCtrl.dispose();
@@ -43,28 +58,24 @@ class _UserManagementViewState extends State<UserManagementView> {
     super.dispose();
   }
 
-  Future<List<Map<String, dynamic>>> _loadUsers() async {
-    final profiles = await adminClient
-        .from('profiles')
-        .select(
-          'id, full_name, email, nim, faculty, major, academic_year, phone_number, is_active, created_at',
-        );
-    final registrations = await adminClient
-        .from('event_registrations')
-        .select('user_id');
-
-    final counts = <String, int>{};
-    for (final reg in (registrations as List)) {
-      final userId = reg['user_id'] as String?;
-      if (userId == null) continue;
-      counts[userId] = (counts[userId] ?? 0) + 1;
+  Stream<List<Map<String, dynamic>>> _buildUsersStream() async* {
+    final stream = adminClient.from('profiles').stream(primaryKey: ['id']).order('created_at', ascending: false);
+    
+    await for (final profiles in stream) {
+      final registrations = await adminClient.from('event_registrations').select('user_id');
+      final counts = <String, int>{};
+      for (final reg in (registrations as List)) {
+        final userId = reg['user_id'] as String?;
+        if (userId == null) continue;
+        counts[userId] = (counts[userId] ?? 0) + 1;
+      }
+      
+      yield profiles.map((user) {
+        final userMap = Map<String, dynamic>.from(user);
+        final id = userMap['id'] as String? ?? '';
+        return {...userMap, 'registration_count': counts[id] ?? 0};
+      }).toList();
     }
-
-    return (profiles as List).map((user) {
-      final userMap = Map<String, dynamic>.from(user as Map);
-      final id = userMap['id'] as String? ?? '';
-      return {...userMap, 'registration_count': counts[id] ?? 0};
-    }).toList();
   }
 
   Future<void> _createUser() async {
@@ -114,7 +125,6 @@ class _UserManagementViewState extends State<UserManagementView> {
       _majorCtrl.clear();
       _academicYearCtrl.clear();
       _phoneCtrl.clear();
-      setState(() => _usersFuture = _loadUsers());
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -128,7 +138,6 @@ class _UserManagementViewState extends State<UserManagementView> {
         .from('profiles')
         .update({'is_active': !isActive})
         .eq('id', userId);
-    if (mounted) setState(() => _usersFuture = _loadUsers());
   }
 
   Future<void> _deleteUser(String userId) async {
@@ -165,7 +174,6 @@ class _UserManagementViewState extends State<UserManagementView> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Pengguna berhasil dihapus.')),
         );
-        setState(() => _usersFuture = _loadUsers());
       }
     } catch (e) {
       if (mounted) {
@@ -271,17 +279,20 @@ class _UserManagementViewState extends State<UserManagementView> {
               TextFormField(
                 controller: _facultyCtrl,
                 decoration: const InputDecoration(labelText: 'Fakultas'),
+                readOnly: true,
               ),
               const SizedBox(height: 16),
               TextFormField(
                 controller: _majorCtrl,
                 decoration: const InputDecoration(labelText: 'Program Studi'),
+                readOnly: true,
               ),
               const SizedBox(height: 16),
               TextFormField(
                 controller: _academicYearCtrl,
                 decoration: const InputDecoration(labelText: 'Angkatan'),
                 keyboardType: TextInputType.number,
+                readOnly: true,
               ),
               const SizedBox(height: 16),
               TextFormField(
@@ -330,7 +341,6 @@ class _UserManagementViewState extends State<UserManagementView> {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Profil diperbarui!')),
                   );
-                  setState(() => _usersFuture = _loadUsers());
                 }
               } catch (e) {
                 if (mounted) {
@@ -388,23 +398,26 @@ class _UserManagementViewState extends State<UserManagementView> {
                 TextFormField(
                   controller: _facultyCtrl,
                   decoration: const InputDecoration(
-                    labelText: 'Fakultas (Opsional)',
+                    labelText: 'Fakultas (Terisi Otomatis)',
                   ),
+                  readOnly: true,
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
                   controller: _majorCtrl,
                   decoration: const InputDecoration(
-                    labelText: 'Program Studi (Opsional)',
+                    labelText: 'Program Studi (Terisi Otomatis)',
                   ),
+                  readOnly: true,
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
                   controller: _academicYearCtrl,
                   decoration: const InputDecoration(
-                    labelText: 'Angkatan (Opsional)',
+                    labelText: 'Angkatan (Terisi Otomatis)',
                   ),
                   keyboardType: TextInputType.number,
+                  readOnly: true,
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
@@ -465,8 +478,8 @@ class _UserManagementViewState extends State<UserManagementView> {
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(color: AppTheme.divider),
               ),
-              child: FutureBuilder<List<Map<String, dynamic>>>(
-                future: _usersFuture,
+              child: StreamBuilder<List<Map<String, dynamic>>>(
+                stream: _usersStream,
                 builder: (context, snapshot) {
                   if (snapshot.hasError) {
                     return Center(child: Text('Error: ${snapshot.error}'));
@@ -483,6 +496,12 @@ class _UserManagementViewState extends State<UserManagementView> {
                       scrollDirection: Axis.horizontal,
                       child: DataTable(
                         columns: const [
+                          DataColumn(
+                            label: Text(
+                              'Foto',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ),
                           DataColumn(
                             label: Text(
                               'Nama',
@@ -536,6 +555,21 @@ class _UserManagementViewState extends State<UserManagementView> {
                           final isActive = (u['is_active'] as bool?) ?? true;
                           return DataRow(
                             cells: [
+                              DataCell(
+                                CircleAvatar(
+                                  radius: 16,
+                                  backgroundImage: u['avatar_url'] != null
+                                      ? NetworkImage(u['avatar_url'])
+                                      : null,
+                                  backgroundColor: AppTheme.primary.withValues(alpha: 0.1),
+                                  child: u['avatar_url'] == null
+                                      ? Text(
+                                          (u['full_name']?.toString() ?? '?')[0].toUpperCase(),
+                                          style: const TextStyle(fontSize: 12, color: AppTheme.primary),
+                                        )
+                                      : null,
+                                ),
+                              ),
                               DataCell(Text(u['full_name']?.toString() ?? '-')),
                               DataCell(Text(u['email']?.toString() ?? '-')),
                               DataCell(Text(u['nim']?.toString() ?? '-')),

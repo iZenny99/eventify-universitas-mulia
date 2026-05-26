@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/routes/app_routes.dart';
 import '../../../../core/services/auth_service.dart';
+import '../../../../core/utils/nim_parser.dart';
 import '../../../../core/utils/spacing.dart';
 import '../../../../shared/theme/app_colors.dart';
 import '../../../../shared/widgets/app_scaffold.dart';
@@ -19,17 +20,70 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _authService = AuthService();
   final _namaController = TextEditingController();
   final _nimController = TextEditingController();
+  final _fakultasController = TextEditingController();
   final _prodiController = TextEditingController();
   final _angkatanController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
 
   bool _isLoading = false;
+  String? _nimError;
+
+  @override
+  void initState() {
+    super.initState();
+    _nimController.addListener(_onNimChanged);
+  }
+
+  void _onNimChanged() {
+    final nim = _nimController.text.trim();
+    if (nim.isEmpty) {
+      setState(() {
+        _nimError = null;
+        _fakultasController.clear();
+        _prodiController.clear();
+        _angkatanController.clear();
+        _emailController.clear();
+      });
+      return;
+    }
+
+    final parser = NimParser(nim);
+    setState(() {
+      if (!parser.isValidLength) {
+        _nimError = 'NIM harus 7 digit.';
+      } else if (!parser.isNumeric) {
+        _nimError = 'NIM harus berupa angka.';
+      } else if (!parser.isValidProdi) {
+        _nimError = 'Kode prodi pada NIM tidak valid.';
+      } else {
+        _nimError = null;
+      }
+
+      if (parser.isValidLength && parser.isNumeric) {
+        _fakultasController.text = parser.fakultas;
+        _prodiController.text = parser.programStudi;
+        _angkatanController.text = parser.angkatan;
+        if (parser.isValidProdi) {
+           _emailController.text = parser.emailKampus;
+        } else {
+           _emailController.clear();
+        }
+      } else {
+        _fakultasController.clear();
+        _prodiController.clear();
+        _angkatanController.clear();
+        _emailController.clear();
+      }
+    });
+  }
 
   @override
   void dispose() {
+    _nimController.removeListener(_onNimChanged);
     _namaController.dispose();
     _nimController.dispose();
+    _fakultasController.dispose();
     _prodiController.dispose();
     _angkatanController.dispose();
     _emailController.dispose();
@@ -42,33 +96,21 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     final namaLengkap = _namaController.text.trim();
     final nim = _nimController.text.trim();
-    final programStudi = _prodiController.text.trim();
-    final angkatanText = _angkatanController.text.trim();
-    final email = _emailController.text.trim();
     final password = _passwordController.text;
 
     if (namaLengkap.isEmpty ||
         nim.isEmpty ||
-        programStudi.isEmpty ||
-        angkatanText.isEmpty ||
-        email.isEmpty ||
         password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Mohon lengkapi semua data.')),
+        const SnackBar(content: Text('Mohon isi nama, NIM, dan password.')),
       );
       return;
     }
 
-    if (!_isValidNim(nim)) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('NIM harus 7 digit angka.')));
-      return;
-    }
-
-    if (!_isValidEmail(email)) {
+    final parser = NimParser(nim);
+    if (!parser.isValid) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Format email tidak valid.')),
+        const SnackBar(content: Text('NIM tidak valid. Periksa kembali input Anda.')),
       );
       return;
     }
@@ -76,35 +118,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
     if (password.length < 8) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Password minimal 8 karakter.')),
-      );
-      return;
-    }
-
-    if (!_isValidNim(nim)) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('NIM harus 7 digit angka.')));
-      return;
-    }
-
-    if (!_isValidEmail(email)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Format email tidak valid.')),
-      );
-      return;
-    }
-
-    if (password.length < 8) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Password minimal 8 karakter.')),
-      );
-      return;
-    }
-
-    final angkatan = int.tryParse(angkatanText);
-    if (angkatan == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Angkatan harus berupa angka.')),
       );
       return;
     }
@@ -112,12 +125,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
     setState(() => _isLoading = true);
 
     final result = await _authService.register(
-      email: email,
+      email: parser.emailKampus,
       password: password,
       namaLengkap: namaLengkap,
       nim: nim,
-      programStudi: programStudi,
-      angkatan: angkatan,
+      fakultas: parser.fakultas,
+      programStudi: parser.programStudi,
+      angkatan: int.parse(parser.angkatan),
     );
 
     if (!mounted) return;
@@ -137,19 +151,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text(message)));
-  }
-
-  bool _isValidNim(String value) {
-    final nimRegex = RegExp(r'^\d{7}$');
-    return nimRegex.hasMatch(value);
-  }
-
-  bool _isValidEmail(String value) {
-    if (value.contains(' ') || value.contains(',') || value.contains(';')) {
-      return false;
-    }
-    final emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
-    return emailRegex.hasMatch(value);
   }
 
   @override
@@ -197,28 +198,46 @@ class _RegisterScreenState extends State<RegisterScreen> {
             const SizedBox(height: AppSpacing.md),
             AppTextField(
               label: 'NIM',
-              hint: 'Contoh: 2111001',
+              hint: 'Contoh: 2411000',
               icon: Icons.badge_outlined,
+              keyboardType: TextInputType.number,
               controller: _nimController,
             ),
+            if (_nimError != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8, left: 12),
+                child: Text(
+                  _nimError!,
+                  style: textTheme.bodySmall?.copyWith(color: AppColors.error),
+                ),
+              ),
             const SizedBox(height: AppSpacing.lg),
 
             // Academic Information Section
-            _buildSectionHeader(context, 'Akademik'),
+            _buildSectionHeader(context, 'Akademik (Otomatis)'),
+            const SizedBox(height: AppSpacing.md),
+            AppTextField(
+              label: 'Fakultas',
+              hint: '-',
+              icon: Icons.apartment_rounded,
+              controller: _fakultasController,
+              readOnly: true,
+            ),
             const SizedBox(height: AppSpacing.md),
             AppTextField(
               label: 'Program Studi',
-              hint: 'Contoh: Informatika',
+              hint: '-',
               icon: Icons.school_outlined,
               controller: _prodiController,
+              readOnly: true,
             ),
             const SizedBox(height: AppSpacing.md),
             AppTextField(
               label: 'Angkatan',
-              hint: 'Contoh: 2021',
+              hint: '-',
               icon: Icons.calendar_month_outlined,
-              keyboardType: TextInputType.number,
               controller: _angkatanController,
+              readOnly: true,
             ),
             const SizedBox(height: AppSpacing.lg),
 
@@ -227,10 +246,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
             const SizedBox(height: AppSpacing.md),
             AppTextField(
               label: 'Email Kampus',
-              hint: 'nim@universitasmulia.ac.id',
+              hint: 'nim@student.universitasmulia.ac.id',
               icon: Icons.alternate_email_rounded,
-              keyboardType: TextInputType.emailAddress,
               controller: _emailController,
+              readOnly: true,
             ),
             const SizedBox(height: AppSpacing.md),
             AppTextField(

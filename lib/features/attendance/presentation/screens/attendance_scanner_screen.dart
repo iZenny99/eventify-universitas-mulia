@@ -1,8 +1,58 @@
 import 'package:flutter/material.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 import '../../../../shared/theme/app_colors.dart';
+import '../../data/attendance_service.dart';
 
-class AttendanceScannerScreen extends StatelessWidget {
+class AttendanceScannerScreen extends StatefulWidget {
   const AttendanceScannerScreen({super.key});
+
+  @override
+  State<AttendanceScannerScreen> createState() => _AttendanceScannerScreenState();
+}
+
+class _AttendanceScannerScreenState extends State<AttendanceScannerScreen> {
+  final MobileScannerController _scannerController = MobileScannerController();
+  final AttendanceService _attendanceService = AttendanceService();
+  bool _isProcessing = false;
+
+  @override
+  void dispose() {
+    _scannerController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _handleBarcode(BarcodeCapture capture) async {
+    if (_isProcessing) return;
+
+    final List<Barcode> barcodes = capture.barcodes;
+    if (barcodes.isEmpty) return;
+
+    final String? qrData = barcodes.first.rawValue;
+    if (qrData == null) return;
+
+    setState(() => _isProcessing = true);
+    // Pause the scanner to prevent multiple scans
+    await _scannerController.stop();
+
+    // Show loading indicator
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+    );
+
+    final response = await _attendanceService.processQrScan(qrData);
+
+    if (!mounted) return;
+    Navigator.pop(context); // Close loading dialog
+
+    if (response.success) {
+      _showSuccessDialog(context, response.studentData);
+    } else {
+      _showErrorDialog(context, response.message, response.studentData);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -22,125 +72,132 @@ class AttendanceScannerScreen extends StatelessWidget {
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800),
         ),
       ),
-      body: Column(
+      body: Stack(
         children: [
-          const SizedBox(height: 40),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 40),
-            child: Column(
-              children: [
-                Text(
-                  'Arahkan Kamera',
-                  style: textTheme.headlineSmall?.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Posisikan kode QR mahasiswa di dalam kotak pemindai.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.white70),
-                ),
-              ],
-            ),
+          MobileScanner(
+            controller: _scannerController,
+            onDetect: _handleBarcode,
           ),
-          
-          const Spacer(),
-          
-          Center(
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                Container(
-                  width: 280,
-                  height: 280,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.05),
-                    borderRadius: BorderRadius.circular(32),
-                  ),
-                ),
-                
-                Container(
-                  width: 240,
-                  height: 2,
-                  decoration: BoxDecoration(
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppColors.primary.withValues(alpha: 0.5),
-                        blurRadius: 10,
-                        spreadRadius: 2,
+          Column(
+            children: [
+              const SizedBox(height: 40),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 40),
+                child: Column(
+                  children: [
+                    Text(
+                      'Arahkan Kamera',
+                      style: textTheme.headlineSmall?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
                       ),
-                    ],
-                    gradient: LinearGradient(
-                      colors: [
-                        AppColors.primary.withValues(alpha: 0),
-                        AppColors.primary,
-                        AppColors.primary.withValues(alpha: 0),
-                      ],
                     ),
-                  ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Posisikan kode QR mahasiswa di dalam kotak pemindai.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.white70),
+                    ),
+                  ],
                 ),
+              ),
+              
+              const Spacer(),
+              
+              Center(
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    Container(
+                      width: 280,
+                      height: 280,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.05),
+                        borderRadius: BorderRadius.circular(32),
+                      ),
+                    ),
+                    
+                    Container(
+                      width: 240,
+                      height: 2,
+                      decoration: BoxDecoration(
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.primary.withValues(alpha: 0.5),
+                            blurRadius: 10,
+                            spreadRadius: 2,
+                          ),
+                        ],
+                        gradient: LinearGradient(
+                          colors: [
+                            AppColors.primary.withValues(alpha: 0),
+                            AppColors.primary,
+                            AppColors.primary.withValues(alpha: 0),
+                          ],
+                        ),
+                      ),
+                    ),
 
-                SizedBox(
-                  width: 280,
-                  height: 280,
-                  child: CustomPaint(
-                    painter: ScannerCornersPainter(color: AppColors.primary),
-                  ),
+                    SizedBox(
+                      width: 280,
+                      height: 280,
+                      child: CustomPaint(
+                        painter: ScannerCornersPainter(color: AppColors.primary),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          ),
-          
-          const Spacer(),
-          
-          Padding(
-            padding: const EdgeInsets.fromLTRB(32, 0, 32, 48),
-            child: Column(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.flashlight_on_rounded, color: Colors.white, size: 20),
-                      const SizedBox(width: 20),
-                      Container(width: 1, height: 20, color: Colors.white24),
-                      const SizedBox(width: 20),
-                      const Icon(Icons.flip_camera_ios_rounded, color: Colors.white, size: 20),
-                    ],
-                  ),
+              ),
+              
+              const Spacer(),
+              
+              Padding(
+                padding: const EdgeInsets.fromLTRB(32, 0, 32, 48),
+                child: Column(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.flashlight_on_rounded, color: Colors.white, size: 24),
+                            onPressed: () => _scannerController.toggleTorch(),
+                          ),
+                          const SizedBox(width: 20),
+                          Container(width: 1, height: 20, color: Colors.white24),
+                          const SizedBox(width: 20),
+                          IconButton(
+                            icon: const Icon(Icons.flip_camera_ios_rounded, color: Colors.white, size: 24),
+                            onPressed: () => _scannerController.switchCamera(),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 32),
+                  ],
                 ),
-                const SizedBox(height: 32),
-                ElevatedButton(
-                  onPressed: () => _showSuccessDialog(context),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: Colors.black,
-                    minimumSize: const Size.fromHeight(60),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                  ),
-                  child: const Text(
-                    'Simulasi Scan Berhasil',
-                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ],
       ),
     );
   }
 
-  void _showSuccessDialog(BuildContext context) {
+  void _resumeScanner() {
+    setState(() => _isProcessing = false);
+    _scannerController.start();
+  }
+
+  void _showErrorDialog(BuildContext context, String message, Map<String, dynamic>? studentData) {
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (context) => Dialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
         child: Padding(
@@ -150,7 +207,80 @@ class AttendanceScannerScreen extends StatelessWidget {
             children: [
               CircleAvatar(
                 radius: 32,
-                backgroundColor: AppColors.success, // FIXED: Removed const
+                backgroundColor: AppColors.error,
+                child: const Icon(Icons.close_rounded, color: Colors.white, size: 40),
+              ),
+              const SizedBox(height: 24),
+              const Text(
+                'Gagal!',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: TextStyle(color: AppColors.textSecondary),
+              ),
+              if (studentData != null) ...[
+                const SizedBox(height: 24),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: AppColors.background,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 20,
+                        backgroundColor: AppColors.divider,
+                        backgroundImage: studentData['avatar_url'] != null ? NetworkImage(studentData['avatar_url']) : null,
+                        child: studentData['avatar_url'] == null ? const Icon(Icons.person) : null,
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(studentData['full_name'] ?? '-', style: const TextStyle(fontWeight: FontWeight.w700), maxLines: 1, overflow: TextOverflow.ellipsis),
+                            Text('NIM: ${studentData['nim'] ?? '-'}', style: const TextStyle(fontSize: 12)),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              const SizedBox(height: 24),
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  _resumeScanner();
+                },
+                style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+                child: const Text('Tutup', style: TextStyle(color: Colors.white)),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showSuccessDialog(BuildContext context, Map<String, dynamic>? studentData) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircleAvatar(
+                radius: 32,
+                backgroundColor: AppColors.success,
                 child: const Icon(Icons.check_rounded, color: Colors.white, size: 40),
               ),
               const SizedBox(height: 24),
@@ -162,32 +292,44 @@ class AttendanceScannerScreen extends StatelessWidget {
               Text(
                 'Mahasiswa telah terdaftar di event ini.',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: AppColors.textSecondary), // FIXED: Removed const
+                style: TextStyle(color: AppColors.textSecondary),
               ),
-              const SizedBox(height: 24),
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: AppColors.background, // FIXED: Removed const
-                  borderRadius: BorderRadius.circular(16),
+              if (studentData != null) ...[
+                const SizedBox(height: 24),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: AppColors.background,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 20,
+                        backgroundColor: AppColors.divider,
+                        backgroundImage: studentData['avatar_url'] != null ? NetworkImage(studentData['avatar_url']) : null,
+                        child: studentData['avatar_url'] == null ? const Icon(Icons.person) : null,
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(studentData['full_name'] ?? '-', style: const TextStyle(fontWeight: FontWeight.w700), maxLines: 1, overflow: TextOverflow.ellipsis),
+                            Text('NIM: ${studentData['nim'] ?? '-'}', style: const TextStyle(fontSize: 12)),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                child: Row(
-                  children: [
-                    CircleAvatar(radius: 20, backgroundColor: AppColors.divider), // FIXED: Removed const
-                    const SizedBox(width: 16),
-                    const Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Adryo Faresy Devara', style: TextStyle(fontWeight: FontWeight.w700)),
-                        Text('NIM: 21111001', style: TextStyle(fontSize: 12)),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
+              ],
               const SizedBox(height: 24),
               ElevatedButton(
-                onPressed: () => Navigator.pop(context),
+                onPressed: () {
+                  Navigator.pop(context);
+                  _resumeScanner();
+                },
                 child: const Text('Lanjut Scan'),
               ),
             ],

@@ -31,6 +31,7 @@ class CommentRepository {
     required String userId,
     required String commentText,
     int? rating,
+    List<String> mentionedUserIds = const [],
   }) async {
     try {
       final payload = {
@@ -46,7 +47,7 @@ class CommentRepository {
           .select('*, profiles(full_name, avatar_url)')
           .single();
 
-      await _processMentions(commentText, eventId, userId);
+      await _processMentions(mentionedUserIds, eventId, userId);
 
       return EventComment.fromJson(response);
     } catch (e) {
@@ -59,6 +60,7 @@ class CommentRepository {
     required String userId,
     required String commentText,
     required String eventId,
+    List<String> mentionedUserIds = const [],
   }) async {
     try {
       final response = await _supabase
@@ -69,7 +71,7 @@ class CommentRepository {
           .select('*, profiles(full_name, avatar_url)')
           .single();
 
-      await _processMentions(commentText, eventId, userId);
+      await _processMentions(mentionedUserIds, eventId, userId);
 
       return EventComment.fromJson(response);
     } catch (e) {
@@ -78,32 +80,28 @@ class CommentRepository {
   }
 
   Future<void> _processMentions(
-    String text,
+    List<String> mentionedUserIds,
     String eventId,
     String senderId,
   ) async {
     try {
-      final RegExp mentionRegex = RegExp(r'@(\w+)');
-      final Iterable<Match> matches = mentionRegex.allMatches(text);
-      if (matches.isEmpty) return;
+      if (mentionedUserIds.isEmpty) return;
 
-      final List<String> mentionedNames =
-          matches.map((m) => m.group(1)!).toList();
+      final Set<String> uniqueUserIds = mentionedUserIds.toSet();
 
-      for (String name in mentionedNames) {
-        final profilesResponse = await _supabase
-            .from(AppTables.profiles)
-            .select('id')
-            .ilike('full_name', '%$name%')
-            .limit(1)
-            .maybeSingle();
-
-        if (profilesResponse != null) {
-          final targetUserId = profilesResponse['id'] as String;
-          if (targetUserId != senderId) {
+      for (String targetUserId in uniqueUserIds) {
+        if (targetUserId != senderId) {
+          // Verify if user exists before sending notif
+          final exists = await _supabase
+              .from(AppTables.profiles)
+              .select('id')
+              .eq('id', targetUserId)
+              .maybeSingle();
+              
+          if (exists != null) {
             await _supabase.from(AppTables.notifications).insert({
               'user_id': targetUserId,
-              'message': 'Kamu telah ditandai dalam sebuah komentar.',
+              'message': 'Seseorang menyebut Anda dalam komentar acara.',
               'event_id': eventId,
             });
           }
@@ -136,26 +134,8 @@ class CommentRepository {
     required String userId,
   }) async {
     try {
-      final registration = await _supabase
-          .from(AppTables.registrations)
-          .select('id')
-          .eq('event_id', eventId)
-          .eq('user_id', userId)
-          .eq('status', 'confirmed')
-          .maybeSingle();
-
-      if (registration == null) return false;
-
-      final event = await _supabase
-          .from(AppTables.events)
-          .select('status')
-          .eq('id', eventId)
-          .maybeSingle();
-
-      final status = event?['status'] as String?;
-      return status == 'published' ||
-          status == 'ongoing' ||
-          status == 'completed';
+      // Allow any logged-in user to comment
+      return userId.isNotEmpty;
     } catch (e) {
       rethrow;
     }

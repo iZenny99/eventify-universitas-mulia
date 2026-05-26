@@ -10,4 +10,5 @@ class AppTables {
   static const eventComments = 'event_comments';
   static const upcomingEvents = 'view_upcoming_events';
   static const notifications = 'notifications';
+  static const eventBookmarks = 'event_bookmarks';
 }
