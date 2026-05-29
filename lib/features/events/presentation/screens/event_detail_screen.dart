@@ -106,17 +106,19 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
   void _selectMention(MentionUser user) {
     final text = _commentController.text;
     final cursorPosition = _commentController.selection.baseOffset;
-    
+
     final textBeforeCursor = text.substring(0, cursorPosition);
     final textAfterCursor = text.substring(cursorPosition);
-    
+
     final lastAtSymbol = textBeforeCursor.lastIndexOf('@');
     final textBeforeAt = textBeforeCursor.substring(0, lastAtSymbol);
-    
+
     final replacement = '@${user.name} ';
     _commentController.text = textBeforeAt + replacement + textAfterCursor;
-    _commentController.selection = TextSelection.collapsed(offset: textBeforeAt.length + replacement.length);
-    
+    _commentController.selection = TextSelection.collapsed(
+      offset: textBeforeAt.length + replacement.length,
+    );
+
     if (!_mentionedUserIds.contains(user.id)) {
       _mentionedUserIds.add(user.id);
     }
@@ -179,7 +181,6 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
   Future<void> _loadCommentAccess() async {
     final eventId = widget.event?.id;
     if (eventId == null) return;
-
   }
 
   bool get _isLoggedIn => _supabase.auth.currentUser != null;
@@ -199,7 +200,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
     // Ini adalah 'workaround' untuk bug mouse_tracker di beberapa versi Flutter
     await Future.delayed(const Duration(milliseconds: 50));
     if (!mounted) return;
-    
+
     setState(() => _isLoadingAction = true);
     List fields = [];
     try {
@@ -219,7 +220,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
     }
 
     if (!mounted) return;
-    
+
     Map<String, String>? answers;
     if (fields.isEmpty || _registration != null) {
       answers = {};
@@ -227,10 +228,10 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
       await Future.delayed(const Duration(milliseconds: 100));
       if (!mounted) return;
       setState(() => _isLoadingAction = false);
-      
+
       answers = await _showRegistrationForm(fields: fields);
       if (answers == null) return;
-      
+
       if (!mounted) return;
       setState(() => _isLoadingAction = true);
     }
@@ -275,10 +276,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
     } else {
       registration = await _supabase
           .from('event_registrations')
-          .update({
-            'status': 'confirmed',
-            'qr_code': qrCode,
-          })
+          .update({'status': 'confirmed', 'qr_code': qrCode})
           .eq('id', _registration!['id'])
           .select()
           .single();
@@ -328,7 +326,11 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
     } else {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Berhasil mendaftar kembali! Tiket dapat dilihat di profil Anda.')),
+          const SnackBar(
+            content: Text(
+              'Berhasil mendaftar kembali! Tiket dapat dilihat di profil Anda.',
+            ),
+          ),
         );
       }
     }
@@ -456,84 +458,91 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                                 minimumSize: const Size(0, 48),
                               ),
                               onPressed: () {
-                              final answers = <String, String>{};
-                              bool hasError = false;
+                                final answers = <String, String>{};
+                                bool hasError = false;
 
-                              for (final field in fields) {
-                                final id = field['id'] as String;
-                                final label =
-                                    field['label']?.toString() ?? 'Field';
-                                final type =
-                                    field['field_type']?.toString() ?? 'text';
-                                final isRequired = field['is_required'] == true;
-                                final value = type == 'dropdown'
-                                    ? dropdownValues[id]
-                                    : controllers[id]?.text.trim();
+                                for (final field in fields) {
+                                  final id = field['id'] as String;
+                                  final label =
+                                      field['label']?.toString() ?? 'Field';
+                                  final type =
+                                      field['field_type']?.toString() ?? 'text';
+                                  final isRequired =
+                                      field['is_required'] == true;
+                                  final value = type == 'dropdown'
+                                      ? dropdownValues[id]
+                                      : controllers[id]?.text.trim();
 
-                                if (isRequired &&
-                                    (value == null || value.isEmpty)) {
-                                  hasError = true;
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text('$label wajib diisi.'),
-                                    ),
-                                  );
-                                  break;
-                                }
-
-                                if (value != null && value.isNotEmpty) {
-                                  if (type == 'email' &&
-                                      !_isValidEmail(value)) {
+                                  if (isRequired &&
+                                      (value == null || value.isEmpty)) {
                                     hasError = true;
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       SnackBar(
-                                        content: Text(
-                                          'Email untuk $label tidak valid.',
-                                        ),
+                                        content: Text('$label wajib diisi.'),
                                       ),
                                     );
                                     break;
                                   }
 
-                                  if (type == 'number' &&
-                                      !_isValidNumber(value)) {
-                                    hasError = true;
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text(
-                                          '$label harus berupa angka.',
+                                  if (value != null && value.isNotEmpty) {
+                                    if (type == 'email' &&
+                                        !_isValidEmail(value)) {
+                                      hasError = true;
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            'Email untuk $label tidak valid.',
+                                          ),
                                         ),
-                                      ),
-                                    );
-                                    break;
+                                      );
+                                      break;
+                                    }
+
+                                    if (type == 'number' &&
+                                        !_isValidNumber(value)) {
+                                      hasError = true;
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            '$label harus berupa angka.',
+                                          ),
+                                        ),
+                                      );
+                                      break;
+                                    }
+
+                                    if (type == 'phone' &&
+                                        !_isValidPhone(value)) {
+                                      hasError = true;
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            'No HP pada $label tidak valid.',
+                                          ),
+                                        ),
+                                      );
+                                      break;
+                                    }
                                   }
 
-                                  if (type == 'phone' &&
-                                      !_isValidPhone(value)) {
-                                    hasError = true;
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text(
-                                          'No HP pada $label tidak valid.',
-                                        ),
-                                      ),
-                                    );
-                                    break;
+                                  if (value != null && value.isNotEmpty) {
+                                    answers[id] = value;
                                   }
                                 }
 
-                                if (value != null && value.isNotEmpty) {
-                                  answers[id] = value;
+                                if (!hasError) {
+                                  Navigator.pop(context, answers);
                                 }
-                              }
-
-                              if (!hasError) {
-                                Navigator.pop(context, answers);
-                              }
-                            },
-                            child: const Text('Kirim'),
+                              },
+                              child: const Text('Kirim'),
+                            ),
                           ),
-                        ),
                         ],
                       ),
                     ],
@@ -1043,10 +1052,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                     ),
                   ),
                   const SizedBox(height: 32),
-                  _buildCommentsSection(
-                    context: context,
-                    textTheme: textTheme,
-                  ),
+                  _buildCommentsSection(context: context, textTheme: textTheme),
                   const SizedBox(height: 100),
                 ],
               ),
@@ -1090,7 +1096,11 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                             borderRadius: BorderRadius.circular(16),
                           ),
                         ),
-                        child: const Text('Dashboard', maxLines: 1, overflow: TextOverflow.ellipsis),
+                        child: const Text(
+                          'Dashboard',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -1099,63 +1109,72 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                       child: PrimaryButton(
                         label: 'Scan QR',
                         onPressed: () {
-                          Navigator.pushNamed(context, AppRoutes.attendanceScanner);
+                          Navigator.pushNamed(
+                            context,
+                            AppRoutes.attendanceScanner,
+                          );
                         },
                       ),
                     ),
                   ],
                 )
               : _isRegistered
-                  ? Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: _isLoadingAction ? null : _handleCancel,
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: AppColors.error,
-                              side: BorderSide(color: AppColors.error),
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                            ),
-                            child: const Text('Batal'),
+              ? Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: _isLoadingAction ? null : _handleCancel,
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.error,
+                          side: BorderSide(color: AppColors.error),
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
                           ),
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          flex: 2,
-                          child: PrimaryButton(
-                            label: 'Tampilkan QR',
-                            onPressed: _isLoadingAction
-                                ? null
-                                : () {
-                                    final qrToken = _registration?['qr_code'] as String? ?? _registration?['id'] as String?;
-                                    if (qrToken == null || qrToken.isEmpty) {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(content: Text('Data pendaftaran tidak valid.')),
-                                      );
-                                      return;
-                                    }
-                                    Navigator.pushNamed(
-                                      context,
-                                      AppRoutes.myQr,
-                                      arguments: {
-                                        'eventName': data.title,
-                                        'qrToken': qrToken,
-                                      },
-                                    );
-                                  },
-                            isLoading: _isLoadingAction,
-                          ),
-                        ),
-                      ],
-                    )
-                  : PrimaryButton(
-                      label: buttonLabel,
-                      onPressed: _isLoadingAction ? null : buttonAction,
-                      isLoading: _isLoadingAction,
+                        child: const Text('Batal'),
+                      ),
                     ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      flex: 2,
+                      child: PrimaryButton(
+                        label: 'Tampilkan QR',
+                        onPressed: _isLoadingAction
+                            ? null
+                            : () {
+                                final qrToken =
+                                    _registration?['qr_code'] as String? ??
+                                    _registration?['id'] as String?;
+                                if (qrToken == null || qrToken.isEmpty) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text(
+                                        'Data pendaftaran tidak valid.',
+                                      ),
+                                    ),
+                                  );
+                                  return;
+                                }
+                                Navigator.pushNamed(
+                                  context,
+                                  AppRoutes.myQr,
+                                  arguments: {
+                                    'eventName': data.title,
+                                    'qrToken': qrToken,
+                                  },
+                                );
+                              },
+                        isLoading: _isLoadingAction,
+                      ),
+                    ),
+                  ],
+                )
+              : PrimaryButton(
+                  label: buttonLabel,
+                  onPressed: _isLoadingAction ? null : buttonAction,
+                  isLoading: _isLoadingAction,
+                ),
         ),
       ),
     );
@@ -1355,13 +1374,19 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                             _commentController.text = comment.commentText;
                           });
                         },
-                  child: Text('Edit', style: TextStyle(color: AppColors.primary)),
+                  child: Text(
+                    'Edit',
+                    style: TextStyle(color: AppColors.primary),
+                  ),
                 ),
                 TextButton(
                   onPressed: _isSubmittingComment
                       ? null
                       : () => _handleDeleteComment(comment),
-                  child: Text('Hapus', style: TextStyle(color: AppColors.error)),
+                  child: Text(
+                    'Hapus',
+                    style: TextStyle(color: AppColors.error),
+                  ),
                 ),
               ],
             ),
@@ -1446,11 +1471,24 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                 return ListTile(
                   leading: CircleAvatar(
                     backgroundColor: AppColors.primary.withValues(alpha: 0.1),
-                    backgroundImage: user.avatarUrl != null ? NetworkImage(user.avatarUrl!) : null,
-                    child: user.avatarUrl == null ? const Icon(Icons.person, size: 20) : null,
+                    backgroundImage: user.avatarUrl != null
+                        ? NetworkImage(user.avatarUrl!)
+                        : null,
+                    child: user.avatarUrl == null
+                        ? const Icon(Icons.person, size: 20)
+                        : null,
                   ),
-                  title: Text(user.name, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-                  subtitle: Text('${user.nim} • ${user.major}', style: const TextStyle(fontSize: 12)),
+                  title: Text(
+                    user.name,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                  ),
+                  subtitle: Text(
+                    '${user.nim} • ${user.major}',
+                    style: const TextStyle(fontSize: 12),
+                  ),
                   onTap: () => _selectMention(user),
                 );
               },
@@ -1497,9 +1535,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
             SizedBox(
               width: 120,
               child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  minimumSize: const Size(0, 48),
-                ),
+                style: ElevatedButton.styleFrom(minimumSize: const Size(0, 48)),
                 onPressed: _isSubmittingComment ? null : _handleSubmitComment,
                 child: _isSubmittingComment
                     ? const SizedBox(

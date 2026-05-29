@@ -246,7 +246,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
             const SizedBox(height: AppSpacing.md),
             AppTextField(
               label: 'Email Kampus',
-              hint: 'nim@student.universitasmulia.ac.id',
+              hint: 'nim@students.universitasmulia.ac.id',
               icon: Icons.alternate_email_rounded,
               controller: _emailController,
               readOnly: true,

@@ -121,7 +121,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
             AppTextField(
               controller: _emailController,
               label: 'Email Kampus',
-              hint: 'nim@universitasmulia.ac.id',
+              hint: 'nim@students.universitasmulia.ac.id',
               icon: Icons.alternate_email_rounded,
               keyboardType: TextInputType.emailAddress,
             ),

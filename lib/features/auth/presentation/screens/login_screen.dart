@@ -138,7 +138,7 @@ class _LoginScreenState extends State<LoginScreen> {
             const SizedBox(height: AppSpacing.xl),
             AppTextField(
               label: 'Email Kampus',
-              hint: 'nim@universitasmulia.ac.id',
+              hint: 'nim@students.universitasmulia.ac.id',
               icon: Icons.alternate_email_rounded,
               keyboardType: TextInputType.emailAddress,
               controller: _emailController,

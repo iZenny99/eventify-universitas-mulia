@@ -55,6 +55,6 @@ class NimParser {
 
   String get emailKampus {
     if (!isValid) return '';
-    return '$nim@student.universitasmulia.ac.id';
+    return '$nim@students.universitasmulia.ac.id';
   }
 }

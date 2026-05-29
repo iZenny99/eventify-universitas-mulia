@@ -16,10 +16,10 @@ class AuthService {
     required int angkatan,
   }) async {
     try {
-      if (!email.endsWith('@student.universitasmulia.ac.id')) {
+      if (!email.endsWith('@students.universitasmulia.ac.id')) {
         return {
           'success': false,
-          'message': 'Gunakan email kampus (@student.universitasmulia.ac.id)',
+          'message': 'Gunakan email kampus (@students.universitasmulia.ac.id)',
         };
       }
 
