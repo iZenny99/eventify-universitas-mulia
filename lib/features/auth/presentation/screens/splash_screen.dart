@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../../core/routes/app_routes.dart';
 import '../../../../shared/theme/app_colors.dart';
@@ -61,7 +62,12 @@ class _SplashScreenState extends State<SplashScreen>
 
     Future.delayed(const Duration(milliseconds: 2300), () {
       if (!mounted) return;
-      Navigator.pushReplacementNamed(context, AppRoutes.login);
+      final session = Supabase.instance.client.auth.currentSession;
+      if (session != null) {
+        Navigator.pushReplacementNamed(context, AppRoutes.root);
+      } else {
+        Navigator.pushReplacementNamed(context, AppRoutes.login);
+      }
     });
   }
 
