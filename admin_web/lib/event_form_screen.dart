@@ -111,7 +111,9 @@ class _EventFormScreenState extends State<EventFormScreen> {
     } catch (e) {
       final message = e.toString().toLowerCase();
       if (message.contains('bucket') && message.contains('not found')) {
-        throw Exception('Bucket "$_storageBucket" tidak ditemukan di Supabase. Silakan buat bucket storage baru bernama "$_storageBucket" dan set menjadi Public.');
+        throw Exception(
+          'Bucket "$_storageBucket" tidak ditemukan di Supabase. Silakan buat bucket storage baru bernama "$_storageBucket" dan set menjadi Public.',
+        );
       }
       rethrow;
     }
@@ -190,26 +192,42 @@ class _EventFormScreenState extends State<EventFormScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     TextField(
-                      decoration: const InputDecoration(labelText: 'Label Pertanyaan'),
+                      decoration: const InputDecoration(
+                        labelText: 'Label Pertanyaan',
+                      ),
                       onChanged: (v) => label = v,
                     ),
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
                       initialValue: type,
                       items: const [
-                        DropdownMenuItem(value: 'text', child: Text('Teks Singkat')),
-                        DropdownMenuItem(value: 'textarea', child: Text('Teks Panjang')),
+                        DropdownMenuItem(
+                          value: 'text',
+                          child: Text('Teks Singkat'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'textarea',
+                          child: Text('Teks Panjang'),
+                        ),
                         DropdownMenuItem(value: 'email', child: Text('Email')),
-                        DropdownMenuItem(value: 'phone', child: Text('Nomor HP')),
+                        DropdownMenuItem(
+                          value: 'phone',
+                          child: Text('Nomor HP'),
+                        ),
                         DropdownMenuItem(value: 'number', child: Text('Angka')),
-                        DropdownMenuItem(value: 'dropdown', child: Text('Pilihan (Dropdown)')),
+                        DropdownMenuItem(
+                          value: 'dropdown',
+                          child: Text('Pilihan (Dropdown)'),
+                        ),
                       ],
                       onChanged: (v) {
                         setDialogState(() {
                           type = v ?? 'text';
                         });
                       },
-                      decoration: const InputDecoration(labelText: 'Tipe Isian'),
+                      decoration: const InputDecoration(
+                        labelText: 'Tipe Isian',
+                      ),
                     ),
                     if (type == 'dropdown') ...[
                       const SizedBox(height: 12),
@@ -243,8 +261,13 @@ class _EventFormScreenState extends State<EventFormScreen> {
                         'label': label.trim(),
                         'field_type': type,
                         'is_required': isRequired,
+                        'sort_order': _customFields.length,
                         'options': type == 'dropdown'
-                            ? options.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList()
+                            ? options
+                                  .split(',')
+                                  .map((e) => e.trim())
+                                  .where((e) => e.isNotEmpty)
+                                  .toList()
                             : null,
                       });
                     });
@@ -261,6 +284,8 @@ class _EventFormScreenState extends State<EventFormScreen> {
   }
 
   Future<void> _saveEvent() async {
+    if (_isLoading) return;
+
     if (!_formKey.currentState!.validate()) return;
     if (_startDate == null ||
         _endDate == null ||
@@ -286,6 +311,27 @@ class _EventFormScreenState extends State<EventFormScreen> {
     try {
       final supabase = adminClient;
       String? categoryId = _selectedCategoryId;
+      final slug = _slugCtrl.text.trim().toLowerCase().replaceAll(' ', '-');
+
+      final existingEvent = await supabase
+          .from('events')
+          .select('id')
+          .eq('slug', slug)
+          .maybeSingle();
+
+      if (existingEvent != null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Event dengan slug ini sudah ada. Silakan gunakan slug lain.',
+              ),
+            ),
+          );
+        }
+        return;
+      }
+
       if (customCategory.isNotEmpty) {
         final existing = _categories.where((item) {
           final name = item['name']?.toString().toLowerCase() ?? '';
@@ -309,7 +355,7 @@ class _EventFormScreenState extends State<EventFormScreen> {
                 .select('id')
                 .ilike('name', customCategory)
                 .maybeSingle();
-            
+
             if (existingDb != null) {
               categoryId = existingDb['id']?.toString();
               // Aktifkan kembali kategori tersebut
@@ -356,7 +402,7 @@ class _EventFormScreenState extends State<EventFormScreen> {
           .from('events')
           .insert({
             'title': _titleCtrl.text,
-            'slug': _slugCtrl.text.toLowerCase().replaceAll(' ', '-'),
+            'slug': slug,
             'short_description': _shortDescCtrl.text,
             'description': _descCtrl.text,
             'location_name': _locationCtrl.text,
@@ -383,10 +429,11 @@ class _EventFormScreenState extends State<EventFormScreen> {
           final f = _customFields[i];
           fieldsPayload.add({
             'event_id': eventId,
-            'field_name': f['label'],
+            'label': f['label'],
             'field_type': f['field_type'],
             'is_required': f['is_required'],
             'options': f['options'],
+            'sort_order': f['sort_order'] ?? i,
           });
         }
         await supabase.from('event_form_fields').insert(fieldsPayload);
@@ -711,7 +758,9 @@ class _EventFormScreenState extends State<EventFormScreen> {
                       if (_customFields.isEmpty)
                         const Padding(
                           padding: EdgeInsets.symmetric(vertical: 12),
-                          child: Text('Tidak ada formulir tambahan. Pendaftar hanya perlu mengisi nama & email.'),
+                          child: Text(
+                            'Tidak ada formulir tambahan. Pendaftar hanya perlu mengisi nama & email.',
+                          ),
                         )
                       else
                         ListView.builder(
@@ -720,14 +769,22 @@ class _EventFormScreenState extends State<EventFormScreen> {
                           itemCount: _customFields.length,
                           itemBuilder: (context, index) {
                             final field = _customFields[index];
-                            final optionsStr = (field['options'] as List?)?.join(', ') ?? '';
+                            final optionsStr =
+                                (field['options'] as List?)?.join(', ') ?? '';
                             return Card(
                               margin: const EdgeInsets.only(bottom: 8),
                               child: ListTile(
-                                title: Text('${field['label']} ${field['is_required'] ? '*' : ''}'),
-                                subtitle: Text('Tipe: ${field['field_type']}${optionsStr.isNotEmpty ? ' | Pilihan: $optionsStr' : ''}'),
+                                title: Text(
+                                  '${field['label']} ${field['is_required'] ? '*' : ''}',
+                                ),
+                                subtitle: Text(
+                                  'Tipe: ${field['field_type']}${optionsStr.isNotEmpty ? ' | Pilihan: $optionsStr' : ''}',
+                                ),
                                 trailing: IconButton(
-                                  icon: const Icon(Icons.delete, color: Colors.red),
+                                  icon: const Icon(
+                                    Icons.delete,
+                                    color: Colors.red,
+                                  ),
                                   onPressed: () {
                                     setState(() {
                                       _customFields.removeAt(index);

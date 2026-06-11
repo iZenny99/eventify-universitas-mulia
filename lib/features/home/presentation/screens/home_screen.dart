@@ -10,7 +10,6 @@ import '../../../../shared/widgets/event_card.dart';
 import '../../../../shared/widgets/section_header.dart';
 import '../../../events/domain/event_model.dart';
 import '../../../events/data/event_repository.dart';
-import 'root_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -73,250 +72,241 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Widget _buildHeader(TextTheme textTheme) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: AppColors.divider),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              FutureBuilder<Map<String, String?>>(
+                future: _profileFuture,
+                builder: (context, snapshot) {
+                  final avatarUrl = snapshot.data?['avatar'];
+                  final name = snapshot.data?['name'] ?? '-';
+                  return CircleAvatar(
+                    radius: 22,
+                    backgroundColor: AppColors.primary.withValues(alpha: 0.12),
+                    backgroundImage: (avatarUrl != null && avatarUrl.isNotEmpty)
+                        ? CachedNetworkImageProvider(avatarUrl)
+                        : null,
+                    child: (avatarUrl == null || avatarUrl.isEmpty)
+                        ? Text(
+                            name.isNotEmpty ? name[0].toUpperCase() : '-',
+                            style: TextStyle(
+                              color: AppColors.primary,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          )
+                        : null,
+                  );
+                },
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    FutureBuilder<Map<String, String?>>(
+                      future: _profileFuture,
+                      builder: (context, snapshot) {
+                        final name = snapshot.data?['name'] ?? '-';
+                        return Text(
+                          'Halo, $name',
+                          style: textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.textPrimary,
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Temukan, daftar, dan simpan event kampus dengan tampilan yang lebih bersih.',
+                      style: textTheme.bodyMedium?.copyWith(
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                onPressed: () =>
+                    Navigator.pushNamed(context, AppRoutes.notifications),
+                icon: Stack(
+                  children: [
+                    Icon(
+                      Icons.notifications_none_rounded,
+                      color: AppColors.textPrimary,
+                      size: 28,
+                    ),
+                    Positioned(
+                      right: 2,
+                      top: 2,
+                      child: Container(
+                        width: 10,
+                        height: 10,
+                        decoration: const BoxDecoration(
+                          color: Colors.redAccent,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Container(
+            decoration: BoxDecoration(
+              color: AppColors.background,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: AppColors.divider),
+            ),
+            child: TextField(
+              readOnly: true,
+              onTap: () => Navigator.pushNamed(context, '/search'),
+              decoration: InputDecoration(
+                hintText: 'Cari event, workshop, seminar...',
+                hintStyle: TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 14,
+                ),
+                prefixIcon: Icon(
+                  Icons.search_rounded,
+                  color: AppColors.primary,
+                ),
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 18,
+                  vertical: 16,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
 
-    return RefreshIndicator(
-      onRefresh: () async {
-        setState(() {
-          _profileFuture = _loadProfileData();
-          _refreshKey++;
-        });
-        await _loadCategories();
-      },
-      child: SingleChildScrollView(
-        physics: const AlwaysScrollableScrollPhysics(
-          parent: BouncingScrollPhysics(),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildHeader(textTheme),
+        const SizedBox(height: AppSpacing.lg),
+        const SectionHeader(title: 'Kategori Populer'),
+        const SizedBox(height: AppSpacing.sm),
+        SizedBox(
+          height: 48,
+          child: _isLoadingCategories
+              ? const Center(child: CircularProgressIndicator())
+              : ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  physics: const BouncingScrollPhysics(),
+                  itemBuilder: (context, index) {
+                    return CategoryChip(
+                      label: _categories[index],
+                      selected: index == _selectedCategoryIndex,
+                      onTap: () =>
+                          setState(() => _selectedCategoryIndex = index),
+                    );
+                  },
+                  separatorBuilder: (_, __) => const SizedBox(width: 12),
+                  itemCount: _categories.length,
+                ),
         ),
-        padding: const EdgeInsets.only(bottom: AppSpacing.lg),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Premium Header with Gradient
-            Container(
-              padding: const EdgeInsets.only(top: 60, left: 24, right: 24, bottom: 32),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    Color(0xFFEF4444), // Primary
-                    Color(0xFFF59E0B), // Accent
-                  ],
-                ),
-                borderRadius: const BorderRadius.only(
-                  bottomLeft: Radius.circular(40),
-                  bottomRight: Radius.circular(40),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.primary.withValues(alpha: 0.3),
-                    blurRadius: 20,
-                    offset: const Offset(0, 10),
-                  ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Row for Profile and Notifications
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            FutureBuilder<Map<String, String?>>(
-                              future: _profileFuture,
-                              builder: (context, snapshot) {
-                                final name = snapshot.data?['name'] ?? '-';
-                                return Text(
-                                  'Halo, $name! 👋',
-                                  style: textTheme.headlineSmall?.copyWith(
-                                    fontWeight: FontWeight.w800,
-                                    color: Colors.white,
-                                  ),
-                                );
-                              },
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Siap menjelajahi event kampus hari ini?',
-                              style: textTheme.bodyMedium?.copyWith(
-                                color: Colors.white.withValues(alpha: 0.8),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      // Notifications & Avatar
-                      Row(
-                        children: [
-                          IconButton(
-                            onPressed: () => Navigator.pushNamed(context, AppRoutes.notifications),
-                            icon: Stack(
-                              children: [
-                                const Icon(Icons.notifications_none_rounded, color: Colors.white, size: 28),
-                                Positioned(
-                                  right: 2,
-                                  top: 2,
-                                  child: Container(
-                                    width: 10,
-                                    height: 10,
-                                    decoration: const BoxDecoration(
-                                      color: Colors.white,
-                                      shape: BoxShape.circle,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          FutureBuilder<Map<String, String?>>(
-                            future: _profileFuture,
-                            builder: (context, snapshot) {
-                              final avatarUrl = snapshot.data?['avatar'];
-                              return InkWell(
-                                onTap: () {
-                                  RootScreen.of(context)?.changeTab(4);
-                                },
-                                borderRadius: BorderRadius.circular(100),
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    border: Border.all(
-                                      color: Colors.white.withValues(alpha: 0.5),
-                                      width: 2,
-                                    ),
-                                  ),
-                                  child: CircleAvatar(
-                                    radius: 24,
-                                    backgroundColor: Colors.white.withValues(alpha: 0.2),
-                                    backgroundImage: (avatarUrl != null && avatarUrl.isNotEmpty)
-                                        ? CachedNetworkImageProvider(avatarUrl)
-                                        : null,
-                                    child: (avatarUrl == null || avatarUrl.isEmpty)
-                                        ? const Icon(
-                                            Icons.person_rounded,
-                                            color: Colors.white,
-                                          )
-                                        : null,
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 32),
-                  // Search Bar inside Header
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.05),
-                          blurRadius: 10,
-                          offset: const Offset(0, 5),
-                        ),
-                      ],
-                    ),
-                    child: TextField(
-                      readOnly: true,
-                      onTap: () => Navigator.pushNamed(context, '/search'),
-                      decoration: InputDecoration(
-                        hintText: 'Cari event, workshop, seminar...',
-                        hintStyle: TextStyle(color: AppColors.textSecondary, fontSize: 14),
-                        prefixIcon: Icon(Icons.search_rounded, color: AppColors.primary),
-                        suffixIcon: Container(
-                          margin: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: AppColors.primary.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Icon(Icons.tune_rounded, color: AppColors.primary, size: 20),
-                        ),
-                        border: InputBorder.none,
-                        enabledBorder: InputBorder.none,
-                        focusedBorder: InputBorder.none,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: AppSpacing.lg),
-            const SectionHeader(title: 'Kategori Populer'),
-            const SizedBox(height: AppSpacing.sm),
-            SizedBox(
-              height: 48,
-              child: _isLoadingCategories
-                  ? const Center(child: CircularProgressIndicator())
-                  : ListView.separated(
-                      scrollDirection: Axis.horizontal,
-                      physics: const BouncingScrollPhysics(),
-                      itemBuilder: (context, index) {
-                        return CategoryChip(
-                          label: _categories[index],
-                          selected: index == _selectedCategoryIndex,
-                          onTap: () =>
-                              setState(() => _selectedCategoryIndex = index),
-                        );
-                      },
-                      separatorBuilder: (_, __) => const SizedBox(width: 12),
-                      itemCount: _categories.length,
-                    ),
-            ),
-            const SizedBox(height: AppSpacing.xl),
-            const SectionHeader(title: 'Rekomendasi Untukmu'),
-            const SizedBox(height: AppSpacing.md),
-            FutureBuilder<List<EventModel>>(
-              key: ValueKey(
-                '$_selectedCategoryIndex-$_refreshKey',
-              ), // Re-fetch when category changes or refreshed
+        const SizedBox(height: AppSpacing.xl),
+        const SectionHeader(title: 'Rekomendasi Untukmu'),
+        const SizedBox(height: AppSpacing.md),
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: () async {
+              setState(() {
+                _profileFuture = _loadProfileData();
+                _refreshKey++;
+              });
+              await _loadCategories();
+            },
+            child: FutureBuilder<List<EventModel>>(
+              key: ValueKey('$_selectedCategoryIndex-$_refreshKey'),
               future: _eventRepository.getUpcomingEvents(
                 category: _categories[_selectedCategoryIndex],
               ),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(32.0),
-                      child: CircularProgressIndicator(),
+                  return ListView(
+                    physics: const AlwaysScrollableScrollPhysics(
+                      parent: BouncingScrollPhysics(),
                     ),
+                    children: const [
+                      SizedBox(height: 72),
+                      Center(child: CircularProgressIndicator()),
+                    ],
                   );
                 }
 
                 if (snapshot.hasError) {
-                  return Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(32.0),
-                      child: Text('Gagal memuat event: ${snapshot.error}'),
+                  return ListView(
+                    physics: const AlwaysScrollableScrollPhysics(
+                      parent: BouncingScrollPhysics(),
                     ),
+                    children: [
+                      const SizedBox(height: 72),
+                      Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(32.0),
+                          child: Text('Gagal memuat event: ${snapshot.error}'),
+                        ),
+                      ),
+                    ],
                   );
                 }
 
                 final events = snapshot.data ?? [];
 
                 if (events.isEmpty) {
-                  return const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(32.0),
-                      child: Text('Belum ada event mendatang.'),
+                  return ListView(
+                    physics: const AlwaysScrollableScrollPhysics(
+                      parent: BouncingScrollPhysics(),
                     ),
+                    children: const [
+                      SizedBox(height: 72),
+                      Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(32.0),
+                          child: Text('Belum ada event mendatang.'),
+                        ),
+                      ),
+                    ],
                   );
                 }
 
                 return ListView.separated(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
+                  physics: const AlwaysScrollableScrollPhysics(
+                    parent: BouncingScrollPhysics(),
+                  ),
+                  padding: const EdgeInsets.only(bottom: AppSpacing.lg),
                   itemBuilder: (context, index) {
                     final event = events[index];
                     return EventCard(
@@ -335,10 +325,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 );
               },
             ),
-            const SizedBox(height: AppSpacing.xl),
-          ],
+          ),
         ),
-      ),
+      ],
     );
   }
 }

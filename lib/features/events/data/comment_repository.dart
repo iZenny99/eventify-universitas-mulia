@@ -97,7 +97,7 @@ class CommentRepository {
               .select('id')
               .eq('id', targetUserId)
               .maybeSingle();
-              
+
           if (exists != null) {
             await _supabase.from(AppTables.notifications).insert({
               'user_id': targetUserId,
@@ -134,8 +134,29 @@ class CommentRepository {
     required String userId,
   }) async {
     try {
-      // Allow any logged-in user to comment
-      return userId.isNotEmpty;
+      if (userId.isEmpty) return false;
+
+      final registration = await _supabase
+          .from('event_registrations')
+          .select('id, status')
+          .eq('event_id', eventId)
+          .eq('user_id', userId)
+          .maybeSingle();
+
+      if (registration == null) return false;
+
+      final status = registration['status']?.toString() ?? '';
+      if (status == 'cancelled') return false;
+
+      final existingComment = await _supabase
+          .from(AppTables.eventComments)
+          .select('id')
+          .eq('event_id', eventId)
+          .eq('user_id', userId)
+          .eq('is_deleted', false)
+          .maybeSingle();
+
+      return existingComment == null;
     } catch (e) {
       rethrow;
     }

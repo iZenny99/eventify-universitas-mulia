@@ -181,6 +181,8 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
   Future<void> _loadCommentAccess() async {
     final eventId = widget.event?.id;
     if (eventId == null) return;
+
+    if (mounted) setState(() {});
   }
 
   bool get _isLoggedIn => _supabase.auth.currentUser != null;
@@ -190,6 +192,30 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
   bool get _isCancelled => _registrationStatus == 'cancelled';
 
   bool get _isRegistered => _registration != null && !_isCancelled;
+
+  bool get _hasUserCommented {
+    final userId = _supabase.auth.currentUser?.id;
+    if (userId == null) return false;
+    return _comments.any(
+      (comment) => comment.userId == userId && !comment.isDeleted,
+    );
+  }
+
+  String? get _commentAccessMessage {
+    if (!_isLoggedIn) {
+      return 'Login untuk memberikan komentar.';
+    }
+
+    if (!_isRegistered) {
+      return 'Anda harus terdaftar dulu untuk memberikan komentar.';
+    }
+
+    if (_editingComment == null && _hasUserCommented) {
+      return 'Anda sudah memberikan komentar untuk event ini. Satu akun hanya dapat komentar sekali.';
+    }
+
+    return null;
+  }
 
   Future<void> _handleRegister(EventModel data) async {
     if (_isLoadingAction) return;
@@ -710,6 +736,24 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
       return;
     }
 
+    if (_editingComment == null && !_isRegistered) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Anda harus terdaftar dulu untuk memberikan komentar.'),
+        ),
+      );
+      return;
+    }
+
+    if (_editingComment == null && _hasUserCommented) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Anda sudah memberikan komentar untuk event ini.'),
+        ),
+      );
+      return;
+    }
+
     setState(() => _isSubmittingComment = true);
     try {
       if (_editingComment != null) {
@@ -734,6 +778,19 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
       await _loadComments();
     } on PostgrestException catch (e) {
       if (!mounted) return;
+      final lower = e.message.toLowerCase();
+      if (lower.contains('row level security') ||
+          lower.contains('violates row-level security') ||
+          lower.contains('new row violates row level security')) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              _commentAccessMessage ?? 'Anda belum diizinkan memberi komentar.',
+            ),
+          ),
+        );
+        return;
+      }
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Gagal: ${e.message}')));
@@ -891,26 +948,25 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Hero(
-              tag: 'event_${data.id}',
-              child: CachedNetworkImage(
-                imageUrl: data.posterUrl ?? 'https://via.placeholder.com/400',
-                height: MediaQuery.of(context).size.height * 0.45,
-                width: double.infinity,
-                fit: BoxFit.cover,
-                placeholder: (context, url) => Container(
-                  height: 400,
-                  color: AppColors.primary.withValues(alpha: 0.1),
-                  child: const Center(child: CircularProgressIndicator()),
-                ),
-                errorWidget: (_, __, ___) => Container(
-                  height: 400,
-                  color: AppColors.primary.withValues(alpha: 0.1),
-                  child: Icon(
-                    Icons.image_not_supported_outlined,
-                    size: 50,
-                    color: AppColors.primary,
-                  ),
+            CachedNetworkImage(
+              imageUrl: data.posterUrl ?? 'https://via.placeholder.com/400',
+              height: MediaQuery.of(context).size.height * 0.45,
+              width: double.infinity,
+              fit: BoxFit.cover,
+              fadeInDuration: const Duration(milliseconds: 250),
+              fadeOutDuration: const Duration(milliseconds: 100),
+              placeholder: (context, url) => Container(
+                height: 400,
+                color: AppColors.primary.withValues(alpha: 0.1),
+                child: const Center(child: CircularProgressIndicator()),
+              ),
+              errorWidget: (_, __, ___) => Container(
+                height: 400,
+                color: AppColors.primary.withValues(alpha: 0.1),
+                child: Icon(
+                  Icons.image_not_supported_outlined,
+                  size: 50,
+                  color: AppColors.primary,
                 ),
               ),
             ),
@@ -1236,6 +1292,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
     required TextTheme textTheme,
   }) {
     final userId = _supabase.auth.currentUser?.id;
+    final accessMessage = _commentAccessMessage;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1275,8 +1332,8 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
             },
           ),
         const SizedBox(height: 16),
-        if (!_isLoggedIn)
-          _buildCommentHint('Login untuk memberikan komentar.')
+        if (accessMessage != null && _editingComment == null)
+          _buildCommentHint(accessMessage)
         else
           _buildCommentForm(),
       ],
