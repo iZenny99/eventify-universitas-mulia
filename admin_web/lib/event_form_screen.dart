@@ -174,113 +174,14 @@ class _EventFormScreenState extends State<EventFormScreen> {
     });
   }
 
-  void _showAddFieldDialog() {
-    String label = '';
-    String type = 'text';
-    bool isRequired = true;
-    String options = '';
-
-    showDialog(
-      context: context,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              title: const Text('Tambah Kolom Formulir'),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextField(
-                      decoration: const InputDecoration(
-                        labelText: 'Label Pertanyaan',
-                      ),
-                      onChanged: (v) => label = v,
-                    ),
-                    const SizedBox(height: 12),
-                    DropdownButtonFormField<String>(
-                      initialValue: type,
-                      items: const [
-                        DropdownMenuItem(
-                          value: 'text',
-                          child: Text('Teks Singkat'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'textarea',
-                          child: Text('Teks Panjang'),
-                        ),
-                        DropdownMenuItem(value: 'email', child: Text('Email')),
-                        DropdownMenuItem(
-                          value: 'phone',
-                          child: Text('Nomor HP'),
-                        ),
-                        DropdownMenuItem(value: 'number', child: Text('Angka')),
-                        DropdownMenuItem(
-                          value: 'dropdown',
-                          child: Text('Pilihan (Dropdown)'),
-                        ),
-                      ],
-                      onChanged: (v) {
-                        setDialogState(() {
-                          type = v ?? 'text';
-                        });
-                      },
-                      decoration: const InputDecoration(
-                        labelText: 'Tipe Isian',
-                      ),
-                    ),
-                    if (type == 'dropdown') ...[
-                      const SizedBox(height: 12),
-                      TextField(
-                        decoration: const InputDecoration(
-                          labelText: 'Pilihan (pisahkan dengan koma)',
-                          hintText: 'Contoh: Ukuran S, Ukuran M, Ukuran L',
-                        ),
-                        onChanged: (v) => options = v,
-                      ),
-                    ],
-                    const SizedBox(height: 12),
-                    SwitchListTile(
-                      title: const Text('Wajib Diisi?'),
-                      value: isRequired,
-                      onChanged: (v) => setDialogState(() => isRequired = v),
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  child: const Text('Batal'),
-                ),
-                ElevatedButton(
-                  onPressed: () {
-                    if (label.trim().isEmpty) return;
-                    setState(() {
-                      _customFields.add({
-                        'label': label.trim(),
-                        'field_type': type,
-                        'is_required': isRequired,
-                        'sort_order': _customFields.length,
-                        'options': type == 'dropdown'
-                            ? options
-                                  .split(',')
-                                  .map((e) => e.trim())
-                                  .where((e) => e.isNotEmpty)
-                                  .toList()
-                            : null,
-                      });
-                    });
-                    Navigator.pop(ctx);
-                  },
-                  child: const Text('Simpan'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
+  void _addNewField() {
+    setState(() {
+      _customFields.add({
+        'label': '',
+        'field_type': 'text',
+        'is_required': true,
+      });
+    });
   }
 
   Future<void> _saveEvent() async {
@@ -740,61 +641,110 @@ class _EventFormScreenState extends State<EventFormScreen> {
                         onClear: _clearPoster,
                       ),
                       const SizedBox(height: 32),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'Formulir Tambahan',
-                            style: Theme.of(context).textTheme.titleMedium
-                                ?.copyWith(fontWeight: FontWeight.w700),
-                          ),
-                          TextButton.icon(
-                            onPressed: _showAddFieldDialog,
-                            icon: const Icon(Icons.add),
-                            label: const Text('Tambah Field'),
-                          ),
-                        ],
+                      Text(
+                        'Formulir Tambahan (Opsional)',
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w700),
                       ),
-                      if (_customFields.isEmpty)
-                        const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 12),
-                          child: Text(
-                            'Tidak ada formulir tambahan. Pendaftar hanya perlu mengisi nama & email.',
-                          ),
-                        )
-                      else
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Anda dapat menambahkan 1, 2, atau berapapun pertanyaan kustom yang harus dijawab pendaftar.',
+                        style: TextStyle(color: AppTheme.textSecondary),
+                      ),
+                      const SizedBox(height: 16),
+                      if (_customFields.isNotEmpty)
                         ListView.builder(
                           shrinkWrap: true,
                           physics: const NeverScrollableScrollPhysics(),
                           itemCount: _customFields.length,
                           itemBuilder: (context, index) {
                             final field = _customFields[index];
-                            final optionsStr =
-                                (field['options'] as List?)?.join(', ') ?? '';
-                            return Card(
-                              margin: const EdgeInsets.only(bottom: 8),
-                              child: ListTile(
-                                title: Text(
-                                  '${field['label']} ${field['is_required'] ? '*' : ''}',
-                                ),
-                                subtitle: Text(
-                                  'Tipe: ${field['field_type']}${optionsStr.isNotEmpty ? ' | Pilihan: $optionsStr' : ''}',
-                                ),
-                                trailing: IconButton(
-                                  icon: const Icon(
-                                    Icons.delete,
-                                    color: Colors.red,
+                            return Container(
+                              margin: const EdgeInsets.only(bottom: 16),
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: AppTheme.background,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: AppTheme.divider),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text(
+                                        'Pertanyaan ${index + 1}',
+                                        style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primary),
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(Icons.delete_outline, color: Colors.red),
+                                        onPressed: () {
+                                          setState(() {
+                                            _customFields.removeAt(index);
+                                          });
+                                        },
+                                      ),
+                                    ],
                                   ),
-                                  onPressed: () {
-                                    setState(() {
-                                      _customFields.removeAt(index);
-                                    });
-                                  },
-                                ),
+                                  const SizedBox(height: 12),
+                                  TextFormField(
+                                    initialValue: field['label'] as String,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Isi Pertanyaan',
+                                      hintText: 'Contoh: Asal Sekolah/Kampus',
+                                    ),
+                                    onChanged: (v) => field['label'] = v,
+                                  ),
+                                  const SizedBox(height: 16),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: DropdownButtonFormField<String>(
+                                          initialValue: field['field_type'] as String,
+                                          items: const [
+                                            DropdownMenuItem(value: 'text', child: Text('Teks Singkat')),
+                                            DropdownMenuItem(value: 'textarea', child: Text('Teks Panjang')),
+                                            DropdownMenuItem(value: 'number', child: Text('Angka (Umur, dll)')),
+                                            DropdownMenuItem(value: 'email', child: Text('Email')),
+                                            DropdownMenuItem(value: 'phone', child: Text('Nomor HP')),
+                                          ],
+                                          onChanged: (v) {
+                                            setState(() {
+                                              field['field_type'] = v!;
+                                            });
+                                          },
+                                          decoration: const InputDecoration(labelText: 'Tipe Jawaban'),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 16),
+                                      Expanded(
+                                        child: SwitchListTile(
+                                          title: const Text('Wajib Diisi?'),
+                                          value: field['is_required'] as bool,
+                                          onChanged: (v) {
+                                            setState(() {
+                                              field['is_required'] = v;
+                                            });
+                                          },
+                                          contentPadding: EdgeInsets.zero,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
                               ),
                             );
                           },
                         ),
+                      OutlinedButton.icon(
+                        onPressed: _addNewField,
+                        icon: const Icon(Icons.add),
+                        label: const Text('Tambah Pertanyaan Baru'),
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size(double.infinity, 48),
+                        ),
+                      ),
                       const SizedBox(height: 32),
                       SizedBox(
                         width: double.infinity,

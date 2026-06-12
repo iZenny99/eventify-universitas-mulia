@@ -132,15 +132,15 @@ class _EventCardState extends State<EventCard> {
                               vertical: 4,
                             ),
                             decoration: BoxDecoration(
-                              color: AppColors.primary.withValues(alpha: 0.1),
+                              gradient: AppColors.primaryGradient,
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(
                               (widget.event.categoryName ?? 'EVENT').toUpperCase(),
-                              style: TextStyle(
+                              style: const TextStyle(
                                 fontSize: 9,
                                 fontWeight: FontWeight.w800,
-                                color: AppColors.primary,
+                                color: Colors.white,
                                 letterSpacing: 0.5,
                               ),
                             ),
@@ -208,15 +208,17 @@ class _EventCardState extends State<EventCard> {
     return Container(
       width: 90,
       height: 90,
-      color: AppColors.primary.withValues(alpha: 0.1),
+      decoration: BoxDecoration(
+        gradient: AppColors.primaryGradient,
+      ),
       child: (widget.event.posterUrl != null && widget.event.posterUrl!.startsWith('http'))
           ? CachedNetworkImage(
               imageUrl: widget.event.posterUrl!,
               fit: BoxFit.cover,
               errorWidget: (_, __, ___) =>
-                  Icon(Icons.event_available, color: AppColors.primary),
+                  const Icon(Icons.event_available, color: Colors.white),
             )
-          : Icon(Icons.event_available, color: AppColors.primary),
+          : const Icon(Icons.event_available, color: Colors.white),
     );
   }
 }

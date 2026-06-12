@@ -75,14 +75,16 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildHeader(TextTheme textTheme) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.only(top: 60, left: 16, right: 16, bottom: 24),
       decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppColors.divider),
+        gradient: AppColors.primaryGradient,
+        borderRadius: const BorderRadius.only(
+          bottomLeft: Radius.circular(32),
+          bottomRight: Radius.circular(32),
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
+            color: AppColors.primary.withValues(alpha: 0.3),
             blurRadius: 18,
             offset: const Offset(0, 8),
           ),
@@ -98,21 +100,28 @@ class _HomeScreenState extends State<HomeScreen> {
                 builder: (context, snapshot) {
                   final avatarUrl = snapshot.data?['avatar'];
                   final name = snapshot.data?['name'] ?? '-';
-                  return CircleAvatar(
-                    radius: 22,
-                    backgroundColor: AppColors.primary.withValues(alpha: 0.12),
-                    backgroundImage: (avatarUrl != null && avatarUrl.isNotEmpty)
-                        ? CachedNetworkImageProvider(avatarUrl)
-                        : null,
-                    child: (avatarUrl == null || avatarUrl.isEmpty)
-                        ? Text(
-                            name.isNotEmpty ? name[0].toUpperCase() : '-',
-                            style: TextStyle(
-                              color: AppColors.primary,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          )
-                        : null,
+                  return Container(
+                    padding: const EdgeInsets.all(3),
+                    decoration: const BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                    ),
+                    child: CircleAvatar(
+                      radius: 22,
+                      backgroundColor: AppColors.divider,
+                      backgroundImage: (avatarUrl != null && avatarUrl.isNotEmpty)
+                          ? CachedNetworkImageProvider(avatarUrl)
+                          : null,
+                      child: (avatarUrl == null || avatarUrl.isEmpty)
+                          ? Text(
+                              name.isNotEmpty ? name[0].toUpperCase() : '-',
+                              style: TextStyle(
+                                color: AppColors.primary,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            )
+                          : null,
+                    ),
                   );
                 },
               ),
@@ -129,7 +138,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           'Halo, $name',
                           style: textTheme.titleLarge?.copyWith(
                             fontWeight: FontWeight.w800,
-                            color: AppColors.textPrimary,
+                            color: Colors.white,
                           ),
                         );
                       },
@@ -138,7 +147,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     Text(
                       'Temukan, daftar, dan simpan event kampus dengan tampilan yang lebih bersih.',
                       style: textTheme.bodyMedium?.copyWith(
-                        color: AppColors.textSecondary,
+                        color: Colors.white.withValues(alpha: 0.8),
                       ),
                     ),
                   ],
@@ -149,9 +158,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     Navigator.pushNamed(context, AppRoutes.notifications),
                 icon: Stack(
                   children: [
-                    Icon(
+                    const Icon(
                       Icons.notifications_none_rounded,
-                      color: AppColors.textPrimary,
+                      color: Colors.white,
                       size: 28,
                     ),
                     Positioned(
@@ -171,12 +180,18 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 24),
           Container(
             decoration: BoxDecoration(
-              color: AppColors.background,
+              color: Colors.white,
               borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: AppColors.divider),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.05),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
             ),
             child: TextField(
               readOnly: true,

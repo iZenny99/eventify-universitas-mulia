@@ -1975,7 +1975,7 @@ class _EventManagementViewState extends State<EventManagementView> {
   }) async {
     final attendedRows = await adminClient
         .from('event_registrations')
-        .select('id, attended_at, profiles(full_name, nim, email)')
+        .select('id, attended_at, user_id, profiles(full_name, nim, email)')
         .eq('event_id', eventId)
         .eq('status', 'attended')
         .order('attended_at', ascending: false);

@@ -191,6 +191,8 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
 
   bool get _isCancelled => _registrationStatus == 'cancelled';
 
+  bool get _isAttended => _registrationStatus == 'attended';
+
   bool get _isRegistered => _registration != null && !_isCancelled;
 
   bool get _hasUserCommented {
@@ -652,7 +654,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
   }
 
   Future<void> _handleCancel() async {
-    if (_isLoadingAction || _registration == null) return;
+    if (_isLoadingAction || _registration == null || _isAttended) return;
 
     // Tampilkan popup konfirmasi
     final bool? confirm = await showDialog<bool>(
@@ -1177,25 +1179,27 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
               : _isRegistered
               ? Row(
                   children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: _isLoadingAction ? null : _handleCancel,
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppColors.error,
-                          side: BorderSide(color: AppColors.error),
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
+                    if (!_isAttended)
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: _isLoadingAction ? null : _handleCancel,
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppColors.error,
+                            side: BorderSide(color: AppColors.error),
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
                           ),
+                          child: const Text('Batal'),
                         ),
-                        child: const Text('Batal'),
                       ),
-                    ),
-                    const SizedBox(width: 12),
+                    if (!_isAttended)
+                      const SizedBox(width: 12),
                     Expanded(
-                      flex: 2,
+                      flex: _isAttended ? 1 : 2,
                       child: PrimaryButton(
-                        label: 'Tampilkan QR',
+                        label: _isAttended ? 'Sudah Hadir' : 'Tampilkan QR',
                         onPressed: _isLoadingAction
                             ? null
                             : () {

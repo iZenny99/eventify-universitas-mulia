@@ -26,15 +26,46 @@ class _CertificatesScreenState extends State<CertificatesScreen> {
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null) return [];
 
-    final response = await Supabase.instance.client
+    final certResponse = await Supabase.instance.client
         .from('certificates')
         .select('*, events(title)')
         .eq('user_id', user.id)
         .order('issued_at', ascending: false);
 
-    return (response as List)
+    final generatedCerts = (certResponse as List)
         .map((json) => CertificateModel.fromJson(json))
         .toList();
+
+    final regResponse = await Supabase.instance.client
+        .from('event_registrations')
+        .select('*, events(title)')
+        .eq('user_id', user.id)
+        .eq('status', 'attended');
+
+    final generatedEventIds = generatedCerts.map((c) => c.eventId).toSet();
+    final List<CertificateModel> pendingCerts = [];
+    
+    for (final reg in regResponse as List) {
+      final eventId = reg['event_id'] as String?;
+      if (eventId != null && !generatedEventIds.contains(eventId)) {
+        final title = reg['events']?['title'] as String? ?? 'Event';
+        pendingCerts.add(
+          CertificateModel(
+            id: 'pending_$eventId',
+            registrationId: reg['id'] as String?,
+            userId: user.id,
+            eventId: eventId,
+            title: 'Sertifikat $title',
+            certificateUrl: '',
+            issuedAt: DateTime.tryParse(reg['attended_at']?.toString() ?? '') ?? DateTime.now(),
+            eventName: title,
+          ),
+        );
+      }
+    }
+
+    final allCerts = [...generatedCerts, ...pendingCerts]..sort((a, b) => b.issuedAt.compareTo(a.issuedAt));
+    return allCerts;
   }
 
   @override
@@ -295,15 +326,21 @@ class _CertificateCard extends StatelessWidget {
               ),
               child: IconButton(
                 onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Mengunduh sertifikat...')),
-                  );
+                  if (cert.certificateUrl.isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Sertifikat sedang disiapkan oleh admin.')),
+                    );
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Mengunduh sertifikat...')),
+                    );
+                  }
                 },
                 icon: Icon(
-                  Icons.file_download_outlined,
-                  color: AppColors.primary,
+                  cert.certificateUrl.isEmpty ? Icons.hourglass_empty_rounded : Icons.file_download_outlined,
+                  color: cert.certificateUrl.isEmpty ? AppColors.textSecondary : AppColors.primary,
                 ),
-                tooltip: 'Unduh Sertifikat',
+                tooltip: cert.certificateUrl.isEmpty ? 'Menunggu Penerbitan' : 'Unduh Sertifikat',
               ),
             ),
           ],

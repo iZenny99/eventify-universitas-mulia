@@ -106,7 +106,7 @@ class _MyEventsScreenState extends State<MyEventsScreen> {
         .from('event_registrations')
         .select('*, events(*)')
         .eq('user_id', user.id)
-        .eq('status', 'confirmed')
+        .inFilter('status', ['confirmed', 'attended'])
         .order('registered_at', ascending: false);
 
     return (response as List)
@@ -139,20 +139,21 @@ class _MyEventsScreenState extends State<MyEventsScreen> {
       final event = ticket.event;
       if (event == null) return false;
 
-      final dateStr = event.startDate.toIso8601String().split('T').first;
-      final timeStr = event.startTime;
-      DateTime startDateTime;
+      final endDateStr = event.endDate.toIso8601String().split('T').first;
+      final endTimeStr = event.endTime;
+      DateTime endDateTime;
       try {
-        startDateTime = DateTime.parse('$dateStr $timeStr');
+        endDateTime = DateTime.parse('$endDateStr $endTimeStr');
       } catch (_) {
-        startDateTime = event.startDate;
+        endDateTime = event.endDate;
       }
 
-      final isUpcoming = startDateTime.isAfter(now);
-      final isCompleted = !isUpcoming || event.status == 'completed' || ticket.attendedAt != null;
+      final hasEnded = endDateTime.isBefore(now);
+      final isCompleted = hasEnded || event.status == 'completed' || ticket.attendedAt != null || ticket.status == 'attended';
 
-      if (_selectedTab == 0) return isUpcoming && event.status != 'completed' && ticket.attendedAt == null;
-      return isCompleted;
+      if (_selectedTab == 0) return !isCompleted;
+      if (_selectedTab == 1) return isCompleted;
+      return false;
     }).toList();
   }
 
