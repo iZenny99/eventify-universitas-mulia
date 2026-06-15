@@ -1,24 +1,29 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'theme.dart';
 import 'login_screen.dart';
 import 'dashboard_screen.dart';
 
+late final SupabaseClient adminClient;
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  await dotenv.load(fileName: ".env");
 
   await Supabase.initialize(
-    url: 'https://awupuhimbzppoqoeerei.supabase.co',
-    anonKey: 'sb_publishable_hdpNKgQkEEe2XXh4yLNasw_qrg1Vxve',
+    url: dotenv.env['SUPABASE_URL']!,
+    anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
+  );
+
+  adminClient = SupabaseClient(
+    dotenv.env['SUPABASE_URL']!,
+    dotenv.env['SUPABASE_SERVICE_ROLE_KEY']!,
   );
 
   runApp(const AdminApp());
 }
-
-final adminClient = SupabaseClient(
-  'https://awupuhimbzppoqoeerei.supabase.co',
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF3dXB1aGltYnpwcG9xb2VlcmVpIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ5NDI3MCwiZXhwIjoyMDk0MDcwMjcwfQ.aXTGZfl88Z6vdLB8hGDxNKiGTGYU1ZX0qiYhPaNroSw',
-);
 
 class AdminApp extends StatelessWidget {
   const AdminApp({super.key});
